@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -10,7 +11,9 @@ from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutio
 from tradinggpt_options.storage.database import Base
 
 
-def setup_broker() -> tuple[PaperBroker, OptionContract, datetime]:
+def setup_broker(
+    *, charges_per_side: Decimal | None = Decimal("0")
+) -> tuple[PaperBroker, OptionContract, datetime]:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
@@ -18,7 +21,10 @@ def setup_broker() -> tuple[PaperBroker, OptionContract, datetime]:
     broker = PaperBroker(
         session,
         account_name="unit-test",
-        config=PaperExecutionConfig(initial_capital=Decimal("100000")),
+        config=PaperExecutionConfig(
+            initial_capital=Decimal("100000"),
+            charges_per_side=charges_per_side,
+        ),
     )
     contract = OptionContract(
         exchange="NFO",
@@ -145,3 +151,34 @@ def test_equity_marks_open_option_at_bid_and_requires_fresh_quote() -> None:
             {(contract.exchange, contract.tradingsymbol): stale_quote},
             now=now + timedelta(minutes=1),
         )
+
+
+def test_paper_broker_applies_versioned_zerodha_option_charges() -> None:
+    broker, contract, now = setup_broker(charges_per_side=None)
+    entry = broker.buy_to_open(
+        contract=contract,
+        quote=quote(contract, now, "99.90", "100.10"),
+        lots=1,
+        now=now,
+    )
+    assert entry.cash_balance == Decimal("93466.96")
+    trade = broker.trade_history()[0]
+    assert trade.charges == Decimal("26.54")
+    entry_breakdown = json.loads(trade.entry_charges_json)
+    assert entry_breakdown["schedule_version"] == "zerodha-nse-options-2026-04-01"
+    assert entry_breakdown["stamp_duty"] == "0.20"
+    assert entry_breakdown["stt"] == "0.00"
+
+    exit_fill = broker.sell_to_close(
+        trade_id=entry.trade_id,
+        quote=quote(contract, now + timedelta(minutes=5), "104.90", "105.10"),
+        now=now + timedelta(minutes=5),
+    )
+    assert exit_fill.cash_balance == Decimal("100248.76")
+    trade = broker.trade_history()[0]
+    assert trade.charges == Decimal("63.24")
+    assert trade.gross_pnl == Decimal("312.00")
+    assert trade.net_pnl == Decimal("248.76")
+    exit_breakdown = json.loads(trade.exit_charges_json)
+    assert exit_breakdown["stt"] == "10.23"
+    assert exit_breakdown["stamp_duty"] == "0.00"
