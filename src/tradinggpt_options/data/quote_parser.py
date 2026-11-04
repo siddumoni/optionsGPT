@@ -74,3 +74,31 @@ def parse_kite_quote(
         volume=_optional_nonnegative_int(payload.get("volume")),
         open_interest=_optional_nonnegative_int(payload.get("oi")),
     )
+
+
+def parse_kite_tick(
+    *,
+    exchange: str,
+    tradingsymbol: str,
+    instrument_token: int,
+    payload: dict[str, Any],
+    received_at: datetime | None = None,
+) -> OptionQuote:
+    """Normalize one full-mode Kite WebSocket tick.
+
+    KiteTicker uses volume_traded for cumulative traded volume and may expose
+    exchange_timestamp or timestamp depending on SDK/feed version. Unrecognized
+    timestamps are left absent rather than guessed.
+    """
+    normalized = dict(payload)
+    if "timestamp" not in normalized or normalized.get("timestamp") is None:
+        normalized["timestamp"] = payload.get("exchange_timestamp")
+    if normalized.get("volume") is None:
+        normalized["volume"] = payload.get("volume_traded")
+    return parse_kite_quote(
+        exchange=exchange,
+        tradingsymbol=tradingsymbol,
+        instrument_token=instrument_token,
+        payload=normalized,
+        received_at=received_at,
+    )
