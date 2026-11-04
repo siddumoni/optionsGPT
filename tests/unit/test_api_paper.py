@@ -67,3 +67,4 @@ def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
         assert trades.status_code == 200
         assert len(trades.json()) == 1
         assert trades.json()[0]["option_type"] == "CE"
+        assert trades.json()[0]["entry_at"].endswith("+00:00")
