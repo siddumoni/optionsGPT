@@ -37,6 +37,8 @@ class KiteTickerClient(Protocol):
 
     def subscribe(self, instrument_tokens: list[int]) -> None: ...
 
+    def unsubscribe(self, instrument_tokens: list[int]) -> None: ...
+
     def set_mode(self, mode: str, instrument_tokens: list[int]) -> None: ...
 
 
@@ -311,6 +313,14 @@ class KiteWebSocketSession:
 
     def subscribe(self, instrument_tokens: Iterable[int]) -> tuple[int, ...]:
         return subscribe_full_market_data(self._ticker, instrument_tokens)
+
+    def unsubscribe(self, instrument_tokens: Iterable[int]) -> tuple[int, ...]:
+        tokens = tuple(dict.fromkeys(int(token) for token in instrument_tokens))
+        if any(token <= 0 for token in tokens):
+            raise ValueError("instrument tokens must be positive")
+        if tokens:
+            self._ticker.unsubscribe(list(tokens))
+        return tokens
 
     def close(self) -> None:
         self._connected.clear()
