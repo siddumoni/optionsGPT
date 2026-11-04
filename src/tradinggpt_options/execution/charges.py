@@ -45,7 +45,7 @@ class ChargeBreakdown:
     def as_dict(self) -> dict[str, str]:
         values = asdict(self)
         values["total"] = self.total
-        return {key: format(value, "f") for key, value in values.items()}
+        return {key: format(_money(value), "f") for key, value in values.items()}
 
 
 @dataclass(frozen=True, slots=True)
