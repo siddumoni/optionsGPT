@@ -7,9 +7,8 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
-
 from decimal import Decimal, InvalidOperation
+from typing import Any, Protocol
 
 from tradinggpt_options.data.models import MarketCandle, OptionQuote
 from tradinggpt_options.data.quote_parser import parse_kite_quote
