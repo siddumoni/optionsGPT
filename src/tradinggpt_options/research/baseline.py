@@ -35,13 +35,23 @@ class BaselineStrategyConfig:
             raise ValueError("minimum_candles must be at least 25")
         if self.max_candle_age_seconds < 1 or self.max_chain_age_seconds < 1:
             raise ValueError("freshness limits must be positive")
-        if not 0 <= self.minimum_confidence_score <= 100:
-            raise ValueError("minimum_confidence_score must be in [0, 100]")
-        if self.maximum_spread_percent <= 0:
-            raise ValueError("maximum_spread_percent must be positive")
+        if (
+            not isfinite(self.minimum_confidence_score)
+            or not 0 <= self.minimum_confidence_score <= 100
+        ):
+            raise ValueError("minimum_confidence_score must be finite and in [0, 100]")
+        if (
+            not isfinite(self.maximum_spread_percent)
+            or self.maximum_spread_percent <= 0
+        ):
+            raise ValueError("maximum_spread_percent must be finite and positive")
         if self.minimum_option_volume < 0 or self.minimum_open_interest < 0:
             raise ValueError("minimum volume and OI cannot be negative")
-        if not 0 < self.minimum_delta_abs <= self.maximum_delta_abs <= 1:
+        if (
+            not isfinite(self.minimum_delta_abs)
+            or not isfinite(self.maximum_delta_abs)
+            or not 0 < self.minimum_delta_abs <= self.maximum_delta_abs <= 1
+        ):
             raise ValueError("delta bounds must satisfy 0 < min <= max <= 1")
 
 
@@ -228,6 +238,15 @@ def analyze_baseline(
             ("minimum candle sample not met",),
         )
     ordered = sorted(candles, key=lambda candle: candle.timestamp)
+    identities = {
+        (candle.exchange, candle.tradingsymbol, candle.interval)
+        for candle in ordered
+    }
+    if len(identities) != 1:
+        raise ValueError("all candles must belong to one instrument and interval")
+    timestamps = [candle.timestamp for candle in ordered]
+    if len(set(timestamps)) != len(timestamps):
+        raise ValueError("underlying candles contain duplicate timestamps")
     latest = ordered[-1]
     age_seconds = (now.astimezone(UTC) - latest.timestamp.astimezone(UTC)).total_seconds()
     if age_seconds < -5 or age_seconds > settings.max_candle_age_seconds:
@@ -264,9 +283,23 @@ def analyze_baseline(
             ("option chain freshness check failed",),
         )
 
-    if any(candle.interval != latest.interval for candle in ordered):
-        raise ValueError("all candles must use the same interval")
-    indicators = _indicators(ordered[-30:])
+    try:
+        indicators = _indicators(ordered[-30:])
+    except ValueError as exc:
+        return BaselineAnalysis(
+            TradeDecision(
+                chain.underlying,
+                "NO_TRADE",
+                None,
+                None,
+                (str(exc),),
+                (),
+                MODEL_VERSION,
+            ),
+            None,
+            None,
+            ("indicator calculation could not be completed",),
+        )
     if not all(
         isfinite(value)
         for value in (
