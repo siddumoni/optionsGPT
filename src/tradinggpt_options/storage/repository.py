@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,12 @@ class MarketDataRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def save_instrument_master(self, contracts: tuple[OptionContract, ...], *, snapshot_date: date) -> int:
+    def save_instrument_master(
+        self,
+        contracts: tuple[OptionContract, ...],
+        *,
+        snapshot_date: date,
+    ) -> int:
         saved = 0
         for contract in contracts:
             existing = self.session.scalar(
@@ -23,23 +29,30 @@ class MarketDataRepository:
                 )
             )
             if existing is None:
-                self.session.add(InstrumentSnapshot(
-                    snapshot_date=snapshot_date,
-                    exchange=contract.exchange,
-                    tradingsymbol=contract.tradingsymbol,
-                    instrument_token=contract.instrument_token,
-                    underlying=contract.underlying,
-                    expiry=contract.expiry,
-                    strike=contract.strike,
-                    option_type=contract.option_type,
-                    lot_size=contract.lot_size,
-                    tick_size=contract.tick_size,
-                ))
+                self.session.add(
+                    InstrumentSnapshot(
+                        snapshot_date=snapshot_date,
+                        exchange=contract.exchange,
+                        tradingsymbol=contract.tradingsymbol,
+                        instrument_token=contract.instrument_token,
+                        underlying=contract.underlying,
+                        expiry=contract.expiry,
+                        strike=contract.strike,
+                        option_type=contract.option_type,
+                        lot_size=contract.lot_size,
+                        tick_size=contract.tick_size,
+                    )
+                )
                 saved += 1
         self.session.commit()
         return saved
 
-    def save_quote(self, quote: OptionQuote, *, quality_flags: tuple[str, ...] = ()) -> int:
+    def save_quote(
+        self,
+        quote: OptionQuote,
+        *,
+        quality_flags: tuple[str, ...] = (),
+    ) -> int:
         row = QuoteSnapshot(
             exchange=quote.exchange,
             tradingsymbol=quote.tradingsymbol,
