@@ -1,6 +1,7 @@
 import pytest
 
 from tradinggpt_options.cli import (
+    _option_selection_date,
     _parse_aware_datetime,
     _parse_spot_instrument_mappings,
 )
@@ -43,3 +44,14 @@ def test_rejects_cli_datetime_without_valid_timezone(raw: str) -> None:
 
     with pytest.raises(ArgumentTypeError):
         _parse_aware_datetime(raw)
+
+
+def test_expiry_selection_rolls_forward_after_nse_market_close() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    market_tz = ZoneInfo("Asia/Kolkata")
+    before_close = datetime(2026, 11, 4, 15, 29, tzinfo=market_tz)
+    at_close = datetime(2026, 11, 4, 15, 30, tzinfo=market_tz)
+    assert _option_selection_date(before_close).isoformat() == "2026-11-04"
+    assert _option_selection_date(at_close).isoformat() == "2026-11-05"
