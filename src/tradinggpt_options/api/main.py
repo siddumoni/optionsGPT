@@ -46,7 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.get("/dashboard", include_in_schema=False)
     def dashboard() -> FileResponse:
         dashboard_path = (
-            Path(__file__).resolve().parents[3] / "web" / "dashboard.html"
+            Path(__file__).resolve().parents[1] / "static" / "dashboard.html"
         )
         if not dashboard_path.is_file():
             raise HTTPException(status_code=404, detail="dashboard asset not found")
