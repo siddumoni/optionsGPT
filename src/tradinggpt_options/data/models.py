@@ -178,3 +178,22 @@ class MarketCandle:
             raise ValueError("candle volume cannot be negative")
         if self.open_interest is not None and self.open_interest < 0:
             raise ValueError("candle open interest cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class FutureContract:
+    exchange: str
+    tradingsymbol: str
+    instrument_token: int
+    underlying: str
+    expiry: date
+    lot_size: int
+    tick_size: Decimal
+
+    def __post_init__(self) -> None:
+        if not self.exchange or not self.tradingsymbol or not self.underlying:
+            raise ValueError("future exchange, symbol and underlying are required")
+        if self.instrument_token <= 0 or self.lot_size <= 0:
+            raise ValueError("future token and lot_size must be positive")
+        if not self.tick_size.is_finite() or self.tick_size <= 0:
+            raise ValueError("future tick_size must be finite and positive")
