@@ -55,3 +55,41 @@ class QuoteSnapshot(Base):
     open_interest: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(32), default="kite")
     quality_flags: Mapped[str] = mapped_column(String(512), default="")
+
+
+class PaperAccount(Base):
+    __tablename__ = "paper_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    initial_capital: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    cash_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class PaperTrade(Base):
+    __tablename__ = "paper_trades"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[int] = mapped_column(Integer, index=True)
+    exchange: Mapped[str] = mapped_column(String(12))
+    tradingsymbol: Mapped[str] = mapped_column(String(64), index=True)
+    underlying: Mapped[str] = mapped_column(String(64), index=True)
+    expiry: Mapped[date] = mapped_column(Date)
+    strike: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    option_type: Mapped[str] = mapped_column(String(2))
+    lot_size: Mapped[int] = mapped_column(Integer)
+    quantity: Mapped[int] = mapped_column(Integer)
+    entry_premium: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    exit_premium: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    entry_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    gross_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
+    charges: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
+    net_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
+    entry_reason: Mapped[str] = mapped_column(String(2048), default="")
+    exit_reason: Mapped[str] = mapped_column(String(2048), default="")
