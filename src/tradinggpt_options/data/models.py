@@ -26,6 +26,8 @@ class OptionContract:
             raise ValueError("exchange, tradingsymbol and underlying are required")
         if self.instrument_token <= 0:
             raise ValueError("instrument_token must be positive")
+        if self.option_type not in ("CE", "PE"):
+            raise ValueError("option_type must be CE or PE")
         if self.strike < 0 or self.lot_size <= 0 or self.tick_size <= 0:
             raise ValueError("strike, lot_size and tick_size are invalid")
 
@@ -35,6 +37,12 @@ class DepthLevel:
     price: Decimal
     quantity: int
     orders: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.price.is_finite() or self.price <= 0:
+            raise ValueError("depth price must be finite and positive")
+        if self.quantity < 0 or self.orders < 0:
+            raise ValueError("depth quantity and order count cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +58,25 @@ class OptionQuote:
     volume: int | None
     open_interest: int | None
     source: str = "kite"
+
+    def __post_init__(self) -> None:
+        if self.instrument_token <= 0:
+            raise ValueError("instrument_token must be positive")
+        if self.received_at.tzinfo is None or self.received_at.utcoffset() is None:
+            raise ValueError("received_at must be timezone-aware")
+        if self.exchange_timestamp is not None and (
+            self.exchange_timestamp.tzinfo is None
+            or self.exchange_timestamp.utcoffset() is None
+        ):
+            raise ValueError("exchange_timestamp must be timezone-aware")
+        if self.last_price is not None and (
+            not self.last_price.is_finite() or self.last_price < 0
+        ):
+            raise ValueError("last_price must be finite and nonnegative")
+        if self.volume is not None and self.volume < 0:
+            raise ValueError("volume cannot be negative")
+        if self.open_interest is not None and self.open_interest < 0:
+            raise ValueError("open_interest cannot be negative")
 
     @property
     def best_bid(self) -> Decimal | None:
