@@ -22,7 +22,10 @@ from tradinggpt_options.options.chain import (
     select_nearest_future_contract,
 )
 from tradinggpt_options.options.chain_analytics import build_option_chain_view
-from tradinggpt_options.research.baseline import analyze_baseline
+from tradinggpt_options.research.baseline import (
+    BaselineStrategyConfig,
+    analyze_baseline,
+)
 from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
 from tradinggpt_options.storage.repository import MarketDataRepository
 
@@ -180,6 +183,24 @@ def backfill_underlying_candles(
         engine.dispose()
 
 
+def _completed_intraday_candles(
+    candles,
+    *,
+    now: datetime,
+    interval_seconds: int,
+):
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    now_local = now.astimezone(MARKET_TIMEZONE)
+    return tuple(
+        candle
+        for candle in candles
+        if candle.timestamp.astimezone(MARKET_TIMEZONE)
+        + timedelta(seconds=interval_seconds)
+        <= now_local
+    )
+
+
 def analyze_options(
     *,
     settings: Settings,
@@ -202,6 +223,19 @@ def analyze_options(
         raise ValueError(
             "missing spot instrument mappings for: " + ", ".join(unmapped)
         )
+
+    interval_seconds_by_name = {
+        "minute": 60,
+        "3minute": 180,
+        "5minute": 300,
+        "10minute": 600,
+        "15minute": 900,
+        "30minute": 1800,
+        "60minute": 3600,
+    }
+    if interval not in interval_seconds_by_name:
+        raise ValueError("analyze-options requires an intraday interval")
+    interval_seconds = interval_seconds_by_name[interval]
 
     kite = _build_kite_rest_client(settings)
     adapter = KiteMarketDataAdapter(kite)
@@ -340,7 +374,19 @@ def analyze_options(
                 repository = MarketDataRepository(session)
                 repository.save_candles(candles)
 
-            analysis = analyze_baseline(candles, chain, now=now)
+            completed_candles = _completed_intraday_candles(
+                candles,
+                now=now,
+                interval_seconds=interval_seconds,
+            )
+            analysis = analyze_baseline(
+                completed_candles,
+                chain,
+                now=now,
+                config=BaselineStrategyConfig(
+                    max_candle_age_seconds=max(600, interval_seconds * 2)
+                ),
+            )
             decision = analysis.decision
             print(
                 f"\n{underlying} | expiry={expiry.isoformat()} | "
@@ -554,7 +600,6 @@ def main() -> None:
             "15minute",
             "30minute",
             "60minute",
-            "day",
         ),
         default="5minute",
     )
