@@ -10,7 +10,12 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tradinggpt_options.data.models import OptionContract, OptionQuote, assess_quote_quality
+from tradinggpt_options.data.models import (
+    DepthLevel,
+    OptionContract,
+    OptionQuote,
+    assess_quote_quality,
+)
 from tradinggpt_options.execution.charges import NseOptionsChargeSchedule, OrderSide
 from tradinggpt_options.storage.tables import PaperAccount, PaperTrade
 
@@ -88,6 +93,26 @@ class PaperBroker:
             raise RuntimeError("paper account disappeared from storage")
         return account
 
+    @staticmethod
+    def _depth_fill_price(levels: tuple[DepthLevel, ...], quantity: int) -> Decimal:
+        """Calculate a full-fill VWAP by consuming displayed depth from best price."""
+        remaining = quantity
+        turnover = Decimal("0")
+        for level in levels:
+            filled = min(remaining, level.quantity)
+            turnover += level.price * filled
+            remaining -= filled
+            if remaining == 0:
+                break
+        if remaining:
+            raise ValueError(
+                f"insufficient displayed depth: requested {quantity}, "
+                f"unfilled quantity {remaining}"
+            )
+        return (turnover / quantity).quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP
+        )
+
     def _calculate_charges(
         self,
         *,
@@ -153,9 +178,7 @@ class PaperBroker:
         if lots < 1:
             raise ValueError("lots must be at least one")
         quantity = lots * contract.lot_size
-        ask = quote.best_ask
-        if ask is None:
-            raise ValueError("best ask is required")
+        ask = self._depth_fill_price(quote.ask, quantity)
         notional = (ask * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         entry_charge, entry_charges_json = self._calculate_charges(
             premium=ask,
@@ -237,9 +260,7 @@ class PaperBroker:
         ):
             raise ValueError("exit quote does not match open contract")
 
-        bid = quote.best_bid
-        if bid is None:
-            raise ValueError("best bid is required")
+        bid = self._depth_fill_price(quote.bid, trade.quantity)
         gross_pnl = ((bid - trade.entry_premium) * trade.quantity).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
