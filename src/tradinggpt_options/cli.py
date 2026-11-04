@@ -329,7 +329,16 @@ def main() -> None:
     )
     backfill_parser.add_argument(
         "--interval",
-        choices=("minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute", "day"),
+        choices=(
+            "minute",
+            "3minute",
+            "5minute",
+            "10minute",
+            "15minute",
+            "30minute",
+            "60minute",
+            "day",
+        ),
         default="5minute",
     )
     args = parser.parse_args()
