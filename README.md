@@ -81,8 +81,8 @@ Run one read-only analysis pass:
 tradinggpt-options analyze-options --underlyings NIFTY,BANKNIFTY --strikes-each-side 3 --risk-free-rate 0.065 --interval 5minute
 ```
 
-The command fetches current spot and option quotes, downloads recent underlying candles,
-builds a quality-checked CE/PE chain view, and evaluates the explainable EMA9/EMA21,
+The command fetches current spot and option quotes, resolves the nearest NFO futures contract for volume-backed VWAP candles, downloads its recent history,
+builds a quality-checked CE/PE chain view using spot for option moneyness/IV, and evaluates the explainable EMA9/EMA21,
 session-VWAP, RSI14 and volume baseline. It prints CE, PE or NO_TRADE with the
 selected contract and rationale. The risk-free rate is an explicit model assumption;
 it is not fetched or silently guessed. The score is heuristic, not a win probability.
