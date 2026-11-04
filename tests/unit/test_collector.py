@@ -12,9 +12,12 @@ from tradinggpt_options.storage.tables import InstrumentSnapshot, QuoteSnapshot
 
 
 class FakeRestClient:
+    def __init__(self, *, include_second: bool = False) -> None:
+        self.include_second = include_second
+
     def instruments(self, exchange: str | None = None) -> list[dict]:
         assert exchange == "NFO"
-        return [{
+        rows = [{
             "instrument_token": 123,
             "exchange_token": 1,
             "tradingsymbol": "NIFTY26NOV25000CE",
@@ -28,6 +31,22 @@ class FakeRestClient:
             "segment": "NFO-OPT",
             "exchange": "NFO",
         }]
+        if self.include_second:
+            rows.append({
+                "instrument_token": 124,
+                "exchange_token": 2,
+                "tradingsymbol": "NIFTY26NOV25000PE",
+                "name": "NIFTY",
+                "last_price": 0,
+                "expiry": "2026-11-26",
+                "strike": 25000,
+                "tick_size": 0.05,
+                "lot_size": 65,
+                "instrument_type": "PE",
+                "segment": "NFO-OPT",
+                "exchange": "NFO",
+            })
+        return rows
 
     def quote(self, *instruments: str) -> dict:
         return {}
@@ -38,6 +57,7 @@ class FakeTicker:
 
     def __init__(self) -> None:
         self.subscribed: list[int] = []
+        self.unsubscribed: list[int] = []
         self.mode_calls: list[tuple[str, list[int]]] = []
         self.closed = False
         self.on_ticks = None
@@ -49,6 +69,10 @@ class FakeTicker:
 
     def subscribe(self, tokens: list[int]) -> None:
         self.subscribed = tokens
+
+    def unsubscribe(self, tokens: list[int]) -> None:
+        self.unsubscribed.extend(tokens)
+        self.subscribed = [token for token in self.subscribed if token not in tokens]
 
     def set_mode(self, mode: str, tokens: list[int]) -> None:
         self.mode_calls.append((mode, tokens))
@@ -62,11 +86,16 @@ class FakeTicker:
         self.on_close(self, 1000, "closed")
 
 
-def setup_collector() -> tuple[KiteOptionsCollector, sessionmaker]:
+def setup_collector(
+    *, include_second: bool = False
+) -> tuple[KiteOptionsCollector, sessionmaker]:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
-    adapter = KiteMarketDataAdapter(FakeRestClient(), instrument_interval_seconds=0)
+    adapter = KiteMarketDataAdapter(
+        FakeRestClient(include_second=include_second),
+        instrument_interval_seconds=0,
+    )
     return KiteOptionsCollector(adapter=adapter, session_factory=factory), factory
 
 
@@ -164,4 +193,29 @@ def test_collector_persists_stale_flag_and_counts_unknown_tokens() -> None:
         quote = session.scalar(select(QuoteSnapshot))
         assert quote is not None
         assert "quote exceeds configured freshness threshold" in quote.quality_flags
+    collector.stop()
+
+
+def test_collector_rolls_near_atm_subscriptions_without_restarting_socket() -> None:
+    collector, _factory = setup_collector(include_second=True)
+    contracts = collector.load_daily_instrument_master(
+        underlyings={"NIFTY"},
+        snapshot_date=date(2026, 11, 4),
+    )
+    assert len(contracts) == 2
+
+    ticker = FakeTicker()
+    collector.start(ticker=ticker, contracts=(contracts[0],))
+    assert ticker.subscribed == [123]
+
+    updated = collector.update_contracts((contracts[1],))
+    assert updated == (124,)
+    assert ticker.unsubscribed == [123]
+    assert ticker.subscribed == [124]
+    assert collector.status().subscribed_count == 1
+
+    # KiteTicker reconnect callback must resubscribe the latest window, not
+    # the original token set.
+    ticker.on_connect(ticker, {})
+    assert ticker.subscribed == [124]
     collector.stop()
