@@ -225,9 +225,18 @@ class PaperBroker:
         if limits is None:
             raise ValueError("risk limits must be configured before opening paper positions")
         daily_risk_pnl, open_position_count = self._daily_risk_state(now=observed_now)
+        estimated_exit_fee, _ = self._calculate_charges(
+            premium=Decimal("0.01"),
+            quantity=quantity,
+            side="SELL",
+            at=observed_now,
+        )
+        risk_premium_per_unit = ask + (
+            entry_charge + estimated_exit_fee
+        ) / quantity
         sizing = size_long_option_position(
             available_cash=account.cash_balance,
-            premium_per_unit=ask,
+            premium_per_unit=risk_premium_per_unit,
             lot_size=contract.lot_size,
             limits=limits,
             current_daily_net_pnl=daily_risk_pnl,
