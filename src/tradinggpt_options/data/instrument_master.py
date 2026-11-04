@@ -10,6 +10,34 @@ from typing import Iterable
 from tradinggpt_options.data.models import OptionContract
 
 
+INDEX_UNDERLYING_PREFIXES = (
+    "BANKNIFTY",
+    "MIDCPNIFTY",
+    "NIFTYNXT50",
+    "FINNIFTY",
+    "NIFTY",
+)
+
+
+def _resolve_underlying(name: str, tradingsymbol: str) -> str:
+    """Resolve stock underlyings from name and index underlyings from symbol prefix.
+
+    Kite's daily instrument CSV may leave the name field blank for index
+    derivatives. The index prefixes are explicit and longest-first to avoid
+    matching NIFTY inside BANKNIFTY or NIFTYNXT50.
+    """
+    normalized_name = name.strip().upper()
+    if normalized_name:
+        return normalized_name
+    symbol = tradingsymbol.strip().upper()
+    for prefix in INDEX_UNDERLYING_PREFIXES:
+        if symbol.startswith(prefix):
+            return prefix
+    raise ValueError(
+        "empty underlying name and no recognized NSE index prefix in tradingsymbol"
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class InstrumentParseResult:
     contracts: tuple[OptionContract, ...]
@@ -57,13 +85,11 @@ def parse_kite_instruments(
         ):
             continue
         try:
-            underlying = (row.get("name") or "").strip().upper()
-            if not underlying:
-                raise ValueError("empty underlying name")
-            if allowed is not None and underlying not in allowed:
-                continue
             exchange = (row.get("exchange") or "").strip().upper()
             symbol = (row.get("tradingsymbol") or "").strip().upper()
+            underlying = _resolve_underlying(row.get("name") or "", symbol)
+            if allowed is not None and underlying not in allowed:
+                continue
             identity = (exchange, symbol)
             if not all(identity):
                 raise ValueError("empty exchange/tradingsymbol")
