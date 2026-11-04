@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -11,9 +11,10 @@ def _decimal(value: Any) -> Decimal | None:
     if value is None:
         return None
     try:
-        return Decimal(str(value))
+        result = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
         return None
+    return result if result.is_finite() else None
 
 
 def _depth_levels(levels: Any) -> tuple[DepthLevel, ...]:
@@ -35,6 +36,16 @@ def _depth_levels(levels: Any) -> tuple[DepthLevel, ...]:
     return tuple(result)
 
 
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if number >= 0 else None
+
+
 def parse_kite_quote(
     *,
     exchange: str,
@@ -48,15 +59,18 @@ def parse_kite_quote(
     timestamp = payload.get("timestamp")
     if timestamp is not None and not isinstance(timestamp, datetime):
         timestamp = None
+    observed_at = received_at or datetime.now(UTC)
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("received_at must be timezone-aware")
     return OptionQuote(
         exchange=exchange,
         tradingsymbol=tradingsymbol,
         instrument_token=instrument_token,
         exchange_timestamp=timestamp,
-        received_at=received_at or datetime.now(timezone.utc),
+        received_at=observed_at,
         last_price=_decimal(payload.get("last_price")),
         bid=_depth_levels(depth.get("buy")),
         ask=_depth_levels(depth.get("sell")),
-        volume=int(payload["volume"]) if payload.get("volume") is not None else None,
-        open_interest=int(payload["oi"]) if payload.get("oi") is not None else None,
+        volume=_optional_nonnegative_int(payload.get("volume")),
+        open_interest=_optional_nonnegative_int(payload.get("oi")),
     )
