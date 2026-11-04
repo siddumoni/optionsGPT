@@ -70,10 +70,10 @@ def test_selects_near_atm_call_and_put_window_for_each_underlying() -> None:
         strikes_each_side=1,
     )
     assert {item.strike for item in selected} == {
-        Decimal("25100"), Decimal("25200")
+        Decimal("25000"), Decimal("25100"), Decimal("25200")
     }
     assert {item.option_type for item in selected} == {"CE", "PE"}
-    assert len(selected) == 4
+    assert len(selected) == 6
 
 
 def test_near_atm_selector_rejects_invalid_spot_and_negative_window() -> None:
