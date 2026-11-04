@@ -25,4 +25,8 @@ def build_engine(database_url: str) -> Engine:
 
 
 def build_session_factory(engine: Engine) -> sessionmaker:
-    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    return sessionmaker(
+        bind=engine,
+        autoflush=False,
+        expire_on_commit=False,
+    )
