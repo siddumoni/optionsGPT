@@ -32,7 +32,9 @@ def build_strike_pairs(contracts: Iterable[OptionContract]) -> tuple[StrikePair,
         )
         for key, items in grouped.items()
     ]
-    return tuple(sorted(pairs, key=lambda p: (p.underlying, p.expiry, p.strike)))
+    return tuple(
+        sorted(pairs, key=lambda item: (item.underlying, item.expiry, item.strike))
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,13 +44,21 @@ class ChainRow:
 
 
 def select_nearest_expiry(contracts: Iterable[OptionContract], *, as_of: date) -> date | None:
-    expiries = sorted({c.expiry for c in contracts if c.expiry >= as_of})
+    expiries = sorted({item.expiry for item in contracts if item.expiry >= as_of})
     return expiries[0] if expiries else None
 
 
-def select_atm_strike(pairs: Iterable[StrikePair], *, underlying: str, expiry: date,
-                      underlying_price: Decimal) -> StrikePair | None:
-    eligible = [p for p in pairs if p.underlying == underlying.upper() and p.expiry == expiry]
+def select_atm_strike(
+    pairs: Iterable[StrikePair],
+    *,
+    underlying: str,
+    expiry: date,
+    underlying_price: Decimal,
+) -> StrikePair | None:
+    eligible = [
+        pair for pair in pairs
+        if pair.underlying == underlying.upper() and pair.expiry == expiry
+    ]
     if not eligible:
         return None
-    return min(eligible, key=lambda p: (abs(p.strike - underlying_price), p.strike))
+    return min(eligible, key=lambda pair: (abs(pair.strike - underlying_price), pair.strike))
