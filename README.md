@@ -100,7 +100,7 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 - Full-depth WebSocket subscription helper (3,000 token guard) and lifecycle state callbacks
 - Validated option contract, quote and order-book data models
 - CE/PE strike pairing, nearest-expiry and ATM selection
-- European Black–Scholes Greeks and implied-volatility bisection solver
+- European Black–Scholes Greeks, implied-volatility bisection solver and quality-aware CE/PE chain view with mid-price IV, spread and ATM selection
 - SQLite models/repository for instrument snapshots, quote snapshots, paper accounts and trades
 - Premium-risk lot sizing
 - Local long-option paper broker with depth-aware VWAP entries/exits, insufficient-depth rejection and effective-dated Zerodha/NSE option charges
