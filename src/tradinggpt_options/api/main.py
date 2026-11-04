@@ -92,7 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return [
                 {
                     "id": row.id,
-                    "snapshot_at": row.snapshot_at.isoformat(),
+                    "snapshot_at": datetime_string(row.snapshot_at),
                     "underlying": row.underlying,
                     "expiry": row.expiry.isoformat(),
                     "decision": row.decision,
