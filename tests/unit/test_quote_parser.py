@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import UTC
 from decimal import Decimal
 
 from tradinggpt_options.data.quote_parser import parse_kite_quote
@@ -24,4 +24,4 @@ def test_parses_kite_full_quote_depth() -> None:
     assert quote.best_ask == Decimal("101.6")
     assert quote.volume == 1500
     assert quote.open_interest == 25000
-    assert quote.received_at.tzinfo == timezone.utc
+    assert quote.received_at.tzinfo == UTC
