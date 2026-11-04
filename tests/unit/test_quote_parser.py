@@ -1,7 +1,7 @@
 from datetime import UTC
 from decimal import Decimal
 
-from tradinggpt_options.data.quote_parser import parse_kite_quote
+from tradinggpt_options.data.quote_parser import parse_kite_quote, parse_kite_tick
 
 
 def test_parses_kite_full_quote_depth() -> None:
@@ -52,3 +52,29 @@ def test_rejects_naive_local_receipt_timestamp() -> None:
             payload={},
             received_at=datetime(2026, 11, 4, 10, 0),
         )
+
+
+def test_parses_kite_websocket_tick_field_names() -> None:
+    from datetime import datetime
+
+    timestamp = datetime(2026, 11, 4, 4, 30, tzinfo=UTC)
+    quote = parse_kite_tick(
+        exchange="NFO",
+        tradingsymbol="NIFTY26NOV25000CE",
+        instrument_token=123,
+        payload={
+            "last_price": 100.25,
+            "volume_traded": 12345,
+            "oi": 50000,
+            "exchange_timestamp": timestamp,
+            "depth": {
+                "buy": [{"price": 100.2, "quantity": 65, "orders": 1}],
+                "sell": [{"price": 100.3, "quantity": 130, "orders": 2}],
+            },
+        },
+    )
+    assert quote.exchange_timestamp == timestamp
+    assert quote.volume == 12345
+    assert quote.open_interest == 50000
+    assert quote.best_bid == Decimal("100.2")
+    assert quote.best_ask == Decimal("100.3")
