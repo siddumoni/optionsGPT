@@ -2,10 +2,19 @@ from datetime import date
 from decimal import Decimal
 
 from tradinggpt_options.data.models import OptionContract
-from tradinggpt_options.options.chain import build_strike_pairs, select_atm_strike, select_nearest_expiry
+from tradinggpt_options.options.chain import (
+    build_strike_pairs,
+    select_atm_strike,
+    select_nearest_expiry,
+)
 
 
-def contract(symbol: str, typ: str, strike: str, expiry: date = date(2026, 11, 26)) -> OptionContract:
+def contract(
+    symbol: str,
+    typ: str,
+    strike: str,
+    expiry: date = date(2026, 11, 26),
+) -> OptionContract:
     return OptionContract(
         exchange="NFO",
         tradingsymbol=symbol,
@@ -27,8 +36,10 @@ def test_builds_call_put_pairs_and_selects_atm() -> None:
     ]
     pairs = build_strike_pairs(contracts)
     atm = select_atm_strike(
-        pairs, underlying="NIFTY", expiry=date(2026, 11, 26),
-        underlying_price=Decimal("25020")
+        pairs,
+        underlying="NIFTY",
+        expiry=date(2026, 11, 26),
+        underlying_price=Decimal("25020"),
     )
     assert atm is not None
     assert atm.strike == Decimal("25000")
