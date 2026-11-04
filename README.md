@@ -74,6 +74,21 @@ tradinggpt-options backfill-underlying --underlyings NIFTY,BANKNIFTY --from-date
 
 This stores underlying OHLCV/OI candles in a separate table. It does not create historical option premiums. Kite's continuous-history feature is for futures; do not treat it as an expired-options archive.
 
+
+Run one read-only analysis pass:
+
+```powershell
+tradinggpt-options analyze-options --underlyings NIFTY,BANKNIFTY --strikes-each-side 3 --risk-free-rate 0.065 --interval 5minute
+```
+
+The command fetches current spot and option quotes, downloads recent underlying candles,
+builds a quality-checked CE/PE chain view, and evaluates the explainable EMA9/EMA21,
+session-VWAP, RSI14 and volume baseline. It prints CE, PE or NO_TRADE with the
+selected contract and rationale. The risk-free rate is an explicit model assumption;
+it is not fetched or silently guessed. The score is heuristic, not a win probability.
+News, scheduled events and broad market regime are not yet integrated. This command
+does not submit an order.
+
 The CLI runs continuously until stopped. It does not yet provide a Windows service/task scheduler wrapper or automatic daily token generation.
 
 ## Run the API
@@ -100,7 +115,7 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 - Full-depth WebSocket subscription helper (3,000 token guard) and lifecycle state callbacks
 - Validated option contract, quote and order-book data models
 - CE/PE strike pairing, nearest-expiry and ATM selection
-- European Black–Scholes Greeks, implied-volatility bisection solver and quality-aware CE/PE chain view with mid-price IV, spread and ATM selection
+- European Black–Scholes Greeks, implied-volatility bisection solver, quality-aware CE/PE chain view and explainable EMA/VWAP/RSI/volume baseline analysis CLI
 - SQLite models/repository for instrument snapshots, quote snapshots, paper accounts and trades
 - Premium-risk lot sizing
 - Local long-option paper broker with depth-aware VWAP entries/exits, insufficient-depth rejection and effective-dated Zerodha/NSE option charges
