@@ -44,6 +44,30 @@ tradinggpt-options init-paper-account
 
 This only creates the local SQLite account and its starting virtual balance. It does not authenticate to a broker or send an order.
 
+## Collect live option quotes (read-only)
+
+Set these values in your local .env after creating a Kite Connect app and generating an access token:
+
+```dotenv
+KITE_API_KEY=your_api_key
+KITE_ACCESS_TOKEN=your_daily_access_token
+KITE_UNDERLYING_SPOT_INSTRUMENTS=NIFTY=NSE:NIFTY 50;BANKNIFTY=NSE:NIFTY BANK
+```
+
+Add one mapping per underlying. For stock options, the mapping usually uses the NSE cash symbol, for example `RELIANCE=NSE:RELIANCE`. The underlying name must match the `name` field in Kite's NFO instrument master. Confirm the exact symbol and exchange in your Kite instrument master before use.
+
+Start collection:
+
+```powershell
+tradinggpt-options collect-options --underlyings NIFTY,BANKNIFTY --strikes-each-side 3
+```
+
+The collector fetches the daily NFO master, obtains fresh underlying spot quotes, selects the nearest non-expired expiry and the configured strike window around ATM, then subscribes to those CE/PE contracts in full WebSocket mode. It persists every received quote, including full bid/ask depth, and prints a 30-second health summary. Press Ctrl+C to stop.
+
+The collector is read-only: it does not submit, modify or cancel broker orders. It requires a valid daily Kite access token. Do not share credentials in chat or commit .env.
+
+The CLI runs continuously until stopped. It does not yet provide a Windows service/task scheduler wrapper or automatic daily token generation.
+
 ## Run the API
 
 ```powershell
@@ -77,8 +101,8 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 ## Known limitations
 
 - Kite credentials have not yet been supplied or used to test the adapter against a real account.
-- Live quote ingestion is not yet running as a managed background service; WebSocket adapter is implemented as a library component only.
-- Full options-chain snapshots and OI history need scheduled persistence and more depth than best bid/ask.
+- Live quote ingestion is available through the foreground `collect-options` CLI; Windows service/task scheduling, automatic token generation and robust process supervision remain future work.
+- Quote snapshots now preserve full bid/ask depth. Scheduled chain aggregation, OI history and derived chain analytics remain future work.
 - Statutory options charges are not yet implemented as effective-dated rules. The paper broker's charge value is explicitly a configurable placeholder and currently defaults to zero.
 - Kite's historical candle service is not a long-term expired-options archive. Historical contract-level option data must be licensed/collected and validated before backtesting options.
 - Greeks use European Black–Scholes assumptions; expiry calendar/time conventions and dividend/carry inputs require market-specific validation.
