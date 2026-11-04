@@ -52,3 +52,46 @@ def test_selects_next_expiry_not_expired_contract() -> None:
         contract("NEW", "PE", "25000", date(2026, 11, 26)),
     ]
     assert select_nearest_expiry(contracts, as_of=date(2026, 11, 4)) == date(2026, 11, 26)
+
+
+def test_selects_near_atm_call_and_put_window_for_each_underlying() -> None:
+    from tradinggpt_options.options.chain import select_near_atm_contracts
+
+    expiry = date(2026, 11, 26)
+    contracts = [
+        contract(f"NIFTY{strike}{side}", side, str(strike), expiry)
+        for strike in (24900, 25000, 25100, 25200, 25300)
+        for side in ("CE", "PE")
+    ]
+    selected = select_near_atm_contracts(
+        contracts,
+        spot_prices={"NIFTY": Decimal("25120")},
+        as_of=date(2026, 11, 4),
+        strikes_each_side=1,
+    )
+    assert {item.strike for item in selected} == {
+        Decimal("25100"), Decimal("25200")
+    }
+    assert {item.option_type for item in selected} == {"CE", "PE"}
+    assert len(selected) == 4
+
+
+def test_near_atm_selector_rejects_invalid_spot_and_negative_window() -> None:
+    import pytest
+
+    from tradinggpt_options.options.chain import select_near_atm_contracts
+
+    contracts = [contract("NIFTY25000CE", "CE", "25000")]
+    with pytest.raises(ValueError, match="spot price"):
+        select_near_atm_contracts(
+            contracts,
+            spot_prices={"NIFTY": Decimal("NaN")},
+            as_of=date(2026, 11, 4),
+        )
+    with pytest.raises(ValueError, match="strikes_each_side"):
+        select_near_atm_contracts(
+            contracts,
+            spot_prices={"NIFTY": Decimal("25000")},
+            as_of=date(2026, 11, 4),
+            strikes_each_side=-1,
+        )
