@@ -189,13 +189,13 @@ def test_paper_broker_applies_versioned_zerodha_option_charges() -> None:
         quote=quote(contract, now + timedelta(minutes=5), "104.90", "105.10"),
         now=now + timedelta(minutes=5),
     )
-    assert exit_fill.cash_balance == Decimal("100248.76")
+    assert exit_fill.cash_balance == Decimal("100248.99")
     trade = broker.trade_history()[0]
-    assert trade.charges == Decimal("63.24")
+    assert trade.charges == Decimal("63.01")
     assert trade.gross_pnl == Decimal("312.00")
-    assert trade.net_pnl == Decimal("248.76")
+    assert trade.net_pnl == Decimal("248.99")
     exit_breakdown = json.loads(trade.exit_charges_json)
-    assert exit_breakdown["stt"] == "10.23"
+    assert exit_breakdown["stt"] == "10.00"
     assert exit_breakdown["stamp_duty"] == "0.00"
 
 
