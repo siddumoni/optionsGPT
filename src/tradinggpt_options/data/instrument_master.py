@@ -51,7 +51,10 @@ def parse_kite_instruments(
     seen: set[tuple[str, str]] = set()
 
     for line_number, row in enumerate(reader, start=2):
-        if row.get("segment") != "NFO-OPT" or row.get("instrument_type") not in {"CE", "PE"}:
+        if (
+            (row.get("segment") or "").strip() != "NFO-OPT"
+            or (row.get("instrument_type") or "").strip() not in {"CE", "PE"}
+        ):
             continue
         try:
             underlying = (row.get("name") or "").strip().upper()
@@ -66,6 +69,8 @@ def parse_kite_instruments(
                 raise ValueError("empty exchange/tradingsymbol")
             if identity in seen:
                 raise ValueError("duplicate exchange/tradingsymbol")
+            if not row.get("expiry"):
+                raise ValueError("missing option expiry")
             contract = OptionContract(
                 exchange=exchange,
                 tradingsymbol=symbol,
@@ -83,5 +88,9 @@ def parse_kite_instruments(
             rejected += 1
             errors.append(f"line {line_number}: {exc}")
 
-    contracts.sort(key=lambda item: (item.underlying, item.expiry, item.strike, item.option_type))
+    contracts.sort(
+        key=lambda item: (
+            item.underlying, item.expiry, item.strike, item.option_type
+        )
+    )
     return InstrumentParseResult(tuple(contracts), rejected, tuple(errors))
