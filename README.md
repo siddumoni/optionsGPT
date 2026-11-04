@@ -89,7 +89,7 @@ it is not fetched or silently guessed. The score is heuristic, not a win probabi
 News, scheduled events and broad market regime are not yet integrated. This command
 does not submit an order.
 
-The CLI runs continuously until stopped. It does not yet provide a Windows service/task scheduler wrapper or automatic daily token generation.
+The collector refreshes its near-ATM option subscription window every five minutes, unsubscribing contracts that move out of range and resubscribing the new window after reconnects. It runs until stopped; Windows service/task scheduling remains future work.
 
 ## Run the API
 
