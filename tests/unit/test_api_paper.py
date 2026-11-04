@@ -8,6 +8,7 @@ from tradinggpt_options.api.main import create_app
 from tradinggpt_options.config.settings import Settings
 from tradinggpt_options.data.models import DepthLevel, OptionContract, OptionQuote
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
+from tradinggpt_options.risk.limits import RiskLimits
 from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
 from tradinggpt_options.storage.tables import InstrumentSnapshot, QuoteSnapshot
 
@@ -29,7 +30,14 @@ def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
         broker = PaperBroker(
             session,
             account_name="default",
-            config=PaperExecutionConfig(initial_capital=Decimal("100000")),
+            config=PaperExecutionConfig(
+                initial_capital=Decimal("100000"),
+                risk_limits=RiskLimits(
+                    max_position_loss=Decimal("10000"),
+                    max_daily_loss=Decimal("10000"),
+                    max_concurrent_positions=3,
+                ),
+            ),
         )
         contract = OptionContract(
             exchange="NFO",
