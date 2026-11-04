@@ -104,6 +104,7 @@ def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
         assert len(trades.json()) == 1
         assert trades.json()[0]["option_type"] == "CE"
         assert trades.json()[0]["entry_at"].endswith("+00:00")
+        assert trades.json()[0]["entry_charges"]["schedule_version"] == "zerodha-nse-options-2026-04-01"
         instruments = client.get("/api/v1/market/instruments?underlying=nifty")
         assert instruments.status_code == 200
         assert instruments.json()[0]["tradingsymbol"] == contract.tradingsymbol
