@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from math import isfinite
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
@@ -14,8 +15,8 @@ from tradinggpt_options.data.models import (
 )
 from tradinggpt_options.options.greeks import (
     Greeks,
-    implied_volatility_bisection,
     black_scholes_greeks,
+    implied_volatility_bisection,
 )
 
 MARKET_TIMEZONE = ZoneInfo("Asia/Kolkata")
@@ -191,6 +192,8 @@ def build_option_chain_view(
         raise ValueError("max_quote_age_seconds must be positive")
     if not underlying.strip():
         raise ValueError("underlying is required")
+    if not isfinite(risk_free_rate) or not isfinite(dividend_yield):
+        raise ValueError("risk_free_rate and dividend_yield must be finite")
 
     expiry_at = _expiry_time(expiry)
     seconds_to_expiry = (
