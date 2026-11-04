@@ -83,12 +83,12 @@ def _ema(values: Sequence[float], period: int) -> float:
 
 
 def _rsi(values: Sequence[float], period: int = 14) -> float:
-    changes = [current - previous for previous, current in zip(values, values[1:])]
+    changes = [current - previous for previous, current in zip(values, values[1:], strict=False)]
     gains = [max(change, 0.0) for change in changes]
     losses = [max(-change, 0.0) for change in changes]
     average_gain = fmean(gains[:period])
     average_loss = fmean(losses[:period])
-    for gain, loss in zip(gains[period:], losses[period:]):
+    for gain, loss in zip(gains[period:], losses[period:], strict=True):
         average_gain = (average_gain * (period - 1) + gain) / period
         average_loss = (average_loss * (period - 1) + loss) / period
     if average_loss == 0:
