@@ -54,10 +54,14 @@ class FakeTicker:
 
     def __init__(self) -> None:
         self.subscriptions: list[int] = []
+        self.unsubscriptions: list[int] = []
         self.modes: list[tuple[str, list[int]]] = []
 
     def subscribe(self, instrument_tokens: list[int]) -> None:
         self.subscriptions = instrument_tokens
+
+    def unsubscribe(self, instrument_tokens: list[int]) -> None:
+        self.unsubscriptions.extend(instrument_tokens)
 
     def set_mode(self, mode: str, instrument_tokens: list[int]) -> None:
         self.modes.append((mode, instrument_tokens))
@@ -141,3 +145,14 @@ def test_websocket_session_tracks_connect_disconnect_and_tick_events() -> None:
     assert not session.is_connected
     assert states[0] == ("connected", None)
     assert states[-1] == ("disconnected", "1006: network disconnected")
+
+
+def test_websocket_session_unsubscribes_old_contract_tokens() -> None:
+    from tradinggpt_options.data.kite_adapter import KiteWebSocketSession
+
+    ticker = FakeTicker()
+    session = KiteWebSocketSession(ticker, on_ticks=lambda _ticks: None)
+    assert session.unsubscribe([1, 2, 2]) == (1, 2)
+    assert ticker.unsubscriptions == [1, 2]
+    with pytest.raises(ValueError, match="positive"):
+        session.unsubscribe([0])
