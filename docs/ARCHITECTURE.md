@@ -19,3 +19,23 @@ Positions are represented by exchange-traded option contracts and quantities in 
 ## ADR-005: Backtests must disclose data quality
 
 Reports distinguish historical quote-based fills, OHLC-based simulations and synthetic estimates. Only actual historical contract observations can support claims about historical option premiums.
+
+
+## ADR-006: Read-only market-data boundaries
+
+The Kite adapter exposes only instrument-master, quote and historical-candle reads.
+The WebSocket collector is limited to subscribing to market data. It does not
+receive a Kite order client and cannot place, modify or cancel broker orders.
+
+The current collection CLI uses explicit underlying-to-spot-instrument mappings
+to derive the near-ATM strike window. It fails closed if spot data is missing,
+stale or invalid. The instrument master is captured as a dated snapshot because
+derivative instrument tokens are not durable identifiers.
+
+## ADR-007: Preserve depth and candles as distinct observations
+
+Quote snapshots retain the complete bid and ask depth arrays available in each
+Kite packet. Historical OHLCV candles are stored in a separate table and cannot
+be substituted for quote-level execution prices. Backtest fills must state
+whether they are derived from candle OHLC, actual historical quotes or a
+synthetic assumption.
