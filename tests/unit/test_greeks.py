@@ -1,5 +1,3 @@
-import math
-
 import pytest
 
 from tradinggpt_options.options.greeks import black_scholes_greeks, implied_volatility_bisection
