@@ -13,7 +13,12 @@ from tradinggpt_options.storage.database import Base
 
 
 def setup_broker(
-    *, charges_per_side: Decimal | None = Decimal("0")
+    *,
+    charges_per_side: Decimal | None = Decimal("0"),
+    include_risk_limits: bool = True,
+    max_position_loss: Decimal = Decimal("10000"),
+    max_daily_loss: Decimal = Decimal("10000"),
+    max_concurrent_positions: int = 3,
 ) -> tuple[PaperBroker, OptionContract, datetime]:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -25,11 +30,14 @@ def setup_broker(
         config=PaperExecutionConfig(
             initial_capital=Decimal("100000"),
             charges_per_side=charges_per_side,
-            risk_limits=RiskLimits(
-                max_position_loss=Decimal("10000"),
-                max_daily_loss=Decimal("10000"),
-                max_concurrent_positions=3,
-                max_capital_utilization=Decimal("1.0"),
+            risk_limits=(
+                RiskLimits(
+                    max_position_loss=max_position_loss,
+                    max_daily_loss=max_daily_loss,
+                    max_concurrent_positions=max_concurrent_positions,
+                    max_capital_utilization=Decimal("1.0"),
+                )
+                if include_risk_limits else None
             ),
         ),
     )
@@ -260,6 +268,54 @@ def test_paper_broker_rejects_depth_insufficient_for_full_lot() -> None:
         broker.buy_to_open(
             contract=contract,
             quote=shallow_quote,
+            lots=1,
+            now=now,
+        )
+
+
+def test_paper_broker_requires_explicit_risk_limits() -> None:
+    broker, contract, now = setup_broker(include_risk_limits=False)
+    with pytest.raises(ValueError, match="risk limits must be configured"):
+        broker.buy_to_open(
+            contract=contract,
+            quote=quote(contract, now, "99.9", "100.1"),
+            lots=1,
+            now=now,
+        )
+
+
+def test_paper_broker_rejects_position_over_risk_and_concurrent_limits() -> None:
+    broker, contract, now = setup_broker(max_position_loss=Decimal("1000"))
+    with pytest.raises(ValueError, match="one lot exceeds"):
+        broker.buy_to_open(
+            contract=contract,
+            quote=quote(contract, now, "99.9", "100.1"),
+            lots=1,
+            now=now,
+        )
+
+    broker, contract, now = setup_broker(max_concurrent_positions=1)
+    first = broker.buy_to_open(
+        contract=contract,
+        quote=quote(contract, now, "99.9", "100.1"),
+        lots=1,
+        now=now,
+    )
+    second_contract = OptionContract(
+        exchange="NFO",
+        tradingsymbol="NIFTY26NOV25100CE",
+        instrument_token=124,
+        underlying="NIFTY",
+        expiry=contract.expiry,
+        strike=Decimal("25100"),
+        option_type="CE",
+        lot_size=65,
+        tick_size=Decimal("0.05"),
+    )
+    with pytest.raises(ValueError, match="position limit reached"):
+        broker.buy_to_open(
+            contract=second_contract,
+            quote=quote(second_contract, now, "89.9", "90.1"),
             lots=1,
             now=now,
         )
