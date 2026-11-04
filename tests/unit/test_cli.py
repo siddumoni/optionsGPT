@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 
@@ -36,9 +36,7 @@ def test_rejects_invalid_spot_instrument_mappings(raw: str) -> None:
 
 def test_parses_timezone_aware_cli_datetime() -> None:
     value = _parse_aware_datetime("2026-11-04T09:15:00+05:30")
-    assert value == datetime(2026, 11, 4, 9, 15, tzinfo=UTC).replace(
-        tzinfo=UTC
-    ).astimezone(value.tzinfo)
+    assert value.isoformat() == "2026-11-04T09:15:00+05:30"
 
 
 @pytest.mark.parametrize("raw", ["2026-11-04T09:15:00", "not-a-date"])
