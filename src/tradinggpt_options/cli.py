@@ -124,63 +124,56 @@ def backfill_underlying_candles(
     to_date: datetime,
     interval: str,
 ) -> None:
-    mappings = _parse_spot_instrument_mappings(
-        settings.kite_underlying_spot_instruments
-    )
     underlyings = tuple(
         dict.fromkeys(item.strip().upper() for item in requested_underlyings if item.strip())
     )
     if not underlyings:
         raise ValueError("at least one underlying must be selected")
-    unmapped = sorted(set(underlyings) - set(mappings))
-    if unmapped:
-        raise ValueError(
-            "missing spot instrument mappings for: " + ", ".join(unmapped)
-        )
+    if from_date >= to_date:
+        raise ValueError("from_date must be earlier than to_date")
 
     client = _build_kite_rest_client(settings)
     adapter = KiteMarketDataAdapter(client)
-    instruments = [mappings[item] for item in underlyings]
-    snapshot = adapter.fetch_full_quotes(instruments)
-    if snapshot.missing_symbols:
-        raise RuntimeError(
-            "Kite did not return instrument tokens for: "
-            + ", ".join(snapshot.missing_symbols)
-        )
-    quotes = {
-        (quote.exchange, quote.tradingsymbol): quote
-        for quote in snapshot.quotes
-    }
+    nfo_master_csv = adapter.fetch_option_instrument_master()
+    futures = parse_kite_futures_instruments(
+        nfo_master_csv,
+        underlyings=set(underlyings),
+    ).contracts
+    selection_date = _option_selection_date(datetime.now(MARKET_TIMEZONE))
 
     engine = build_engine(settings.database_url)
     try:
         create_schema(engine)
         factory = build_session_factory(engine)
         total_saved = 0
-        with factory() as session:
-            repository = MarketDataRepository(session)
-            for underlying in underlyings:
-                exchange, symbol = mappings[underlying]
-                quote = quotes.get((exchange, symbol))
-                if quote is None:
-                    raise RuntimeError(f"missing instrument token for {underlying}")
-                candles = adapter.fetch_historical_candles(
-                    exchange=exchange,
-                    tradingsymbol=symbol,
-                    instrument_token=quote.instrument_token,
-                    from_date=from_date,
-                    to_date=to_date,
-                    interval=interval,
-                    include_oi=True,
-                )
+        for underlying in underlyings:
+            future_contract = select_nearest_future_contract(
+                futures,
+                underlying=underlying,
+                as_of=selection_date,
+            )
+            if future_contract is None:
+                print(f"{underlying}: no non-expired NFO future; skipped")
+                continue
+            candles = adapter.fetch_historical_candles(
+                exchange=future_contract.exchange,
+                tradingsymbol=future_contract.tradingsymbol,
+                instrument_token=future_contract.instrument_token,
+                from_date=from_date,
+                to_date=to_date,
+                interval=interval,
+                include_oi=True,
+            )
+            with factory() as session:
+                repository = MarketDataRepository(session)
                 saved = repository.save_candles(candles)
-                total_saved += saved
-                print(
-                    f"{underlying} ({exchange}:{symbol}): "
-                    f"fetched={len(candles)} new_saved={saved}"
-                )
+            total_saved += saved
+            print(
+                f"{underlying} via {future_contract.tradingsymbol}: "
+                f"fetched={len(candles)} new_saved={saved}"
+            )
         print(
-            f"Historical underlying candle backfill complete. "
+            f"Historical futures candle backfill complete. "
             f"New rows saved: {total_saved}"
         )
     finally:
