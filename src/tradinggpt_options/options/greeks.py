@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import erf, exp, log, pi, sqrt
+from math import erf, exp, isfinite, log, pi, sqrt
 from typing import Literal
 
 OptionType = Literal["CE", "PE"]
@@ -43,6 +43,8 @@ def black_scholes_greeks(
     values = (spot, strike, time_to_expiry_years, risk_free_rate, volatility, dividend_yield)
     if not all(isinstance(value, (int, float)) for value in values):
         raise TypeError("model inputs must be numeric")
+    if not all(isfinite(float(value)) for value in values):
+        raise ValueError("model inputs must be finite")
     if spot <= 0 or strike <= 0 or time_to_expiry_years <= 0 or volatility <= 0:
         raise ValueError("spot, strike, time to expiry and volatility must be positive")
     if option_type not in ("CE", "PE"):
@@ -102,8 +104,21 @@ def implied_volatility_bisection(
     max_iterations: int = 200,
 ) -> float | None:
     """Solve European BSM IV by bisection; None denotes invalid/out-of-range premium."""
+    inputs = (
+        option_price, spot, strike, time_to_expiry_years,
+        risk_free_rate, dividend_yield, low_vol, high_vol, tolerance,
+    )
+    if not all(
+        isinstance(value, (int, float)) and isfinite(float(value))
+        for value in inputs
+    ):
+        raise ValueError("IV inputs must be finite numeric values")
     if option_price <= 0 or time_to_expiry_years <= 0:
         return None
+    if spot <= 0 or strike <= 0 or low_vol <= 0 or high_vol <= low_vol:
+        raise ValueError("invalid IV solver bounds or contract inputs")
+    if tolerance <= 0 or max_iterations < 1:
+        raise ValueError("tolerance and max_iterations must be positive")
 
     def theoretical(vol: float) -> float:
         t = time_to_expiry_years
