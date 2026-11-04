@@ -154,6 +154,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "status": trade.status,
                     "gross_pnl": decimal_string(trade.gross_pnl),
                     "charges": decimal_string(trade.charges),
+                    "entry_charges": json.loads(trade.entry_charges_json),
+                    "exit_charges": json.loads(trade.exit_charges_json),
                     "net_pnl": decimal_string(trade.net_pnl),
                     "entry_reason": trade.entry_reason,
                     "exit_reason": trade.exit_reason,
