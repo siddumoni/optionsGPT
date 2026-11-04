@@ -95,3 +95,45 @@ def test_near_atm_selector_rejects_invalid_spot_and_negative_window() -> None:
             as_of=date(2026, 11, 4),
             strikes_each_side=-1,
         )
+
+
+def test_selects_nearest_nonexpired_future_contract() -> None:
+    from tradinggpt_options.data.models import FutureContract
+    from tradinggpt_options.options.chain import select_nearest_future_contract
+
+    futures = [
+        FutureContract(
+            exchange="NFO",
+            tradingsymbol="NIFTY26OCTFUT",
+            instrument_token=1,
+            underlying="NIFTY",
+            expiry=date(2026, 10, 29),
+            lot_size=65,
+            tick_size=Decimal("0.05"),
+        ),
+        FutureContract(
+            exchange="NFO",
+            tradingsymbol="NIFTY26NOVFUT",
+            instrument_token=2,
+            underlying="NIFTY",
+            expiry=date(2026, 11, 26),
+            lot_size=65,
+            tick_size=Decimal("0.05"),
+        ),
+        FutureContract(
+            exchange="NFO",
+            tradingsymbol="NIFTY26DECFUT",
+            instrument_token=3,
+            underlying="NIFTY",
+            expiry=date(2026, 12, 31),
+            lot_size=65,
+            tick_size=Decimal("0.05"),
+        ),
+    ]
+    selected = select_nearest_future_contract(
+        futures,
+        underlying="NIFTY",
+        as_of=date(2026, 11, 4),
+    )
+    assert selected is not None
+    assert selected.tradingsymbol == "NIFTY26NOVFUT"
