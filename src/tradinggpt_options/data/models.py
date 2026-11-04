@@ -28,7 +28,13 @@ class OptionContract:
             raise ValueError("instrument_token must be positive")
         if self.option_type not in ("CE", "PE"):
             raise ValueError("option_type must be CE or PE")
-        if self.strike < 0 or self.lot_size <= 0 or self.tick_size <= 0:
+        if (
+            not self.strike.is_finite()
+            or not self.tick_size.is_finite()
+            or self.strike < 0
+            or self.lot_size <= 0
+            or self.tick_size <= 0
+        ):
             raise ValueError("strike, lot_size and tick_size are invalid")
 
 
@@ -109,17 +115,30 @@ def assess_quote_quality(quote: OptionQuote, *, now: datetime, max_age_seconds: 
         warnings.append("timestamps must be timezone-aware")
         stale = True
     else:
-        stale = (now - age_source).total_seconds() > max_age_seconds
-        if stale:
+        age_seconds = (now - age_source).total_seconds()
+        stale = age_seconds > max_age_seconds or age_seconds < -5
+        if age_seconds > max_age_seconds:
             warnings.append("quote exceeds configured freshness threshold")
+        elif age_seconds < -5:
+            warnings.append("quote timestamp is in the future beyond clock-skew tolerance")
 
     bid = quote.best_bid
     ask = quote.best_ask
     crossed = bid is not None and ask is not None and bid > ask
     if crossed:
         warnings.append("best bid is greater than best ask")
-    missing_bid = bid is None or bid <= 0
-    missing_ask = ask is None or ask <= 0
+    missing_bid = (
+        bid is None
+        or bid <= 0
+        or not quote.bid
+        or quote.bid[0].quantity <= 0
+    )
+    missing_ask = (
+        ask is None
+        or ask <= 0
+        or not quote.ask
+        or quote.ask[0].quantity <= 0
+    )
     if missing_bid:
         warnings.append("missing or invalid best bid")
     if missing_ask:
