@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from tradinggpt_options.data.models import OptionQuote
+from decimal import Decimal, InvalidOperation
+
+from tradinggpt_options.data.models import MarketCandle, OptionQuote
 from tradinggpt_options.data.quote_parser import parse_kite_quote
 
 
@@ -19,6 +21,16 @@ class KiteRestClient(Protocol):
     def instruments(self, exchange: str | None = None) -> list[dict[str, Any]]: ...
 
     def quote(self, *instruments: str) -> dict[str, dict[str, Any]]: ...
+
+    def historical_data(
+        self,
+        instrument_token: int,
+        from_date: datetime,
+        to_date: datetime,
+        interval: str,
+        continuous: bool = False,
+        oi: bool = False,
+    ) -> list[dict[str, Any]]: ...
 
 
 class KiteTickerClient(Protocol):
@@ -78,10 +90,12 @@ class KiteMarketDataAdapter:
         *,
         quote_interval_seconds: float = 1.0,
         instrument_interval_seconds: float = 0.1,
+        historical_interval_seconds: float = 1.0,
     ) -> None:
         self._client = client
         self._quote_pacer = RequestPacer(interval_seconds=quote_interval_seconds)
         self._instrument_pacer = RequestPacer(interval_seconds=instrument_interval_seconds)
+        self._historical_pacer = RequestPacer(interval_seconds=historical_interval_seconds)
 
     def fetch_option_instrument_master(self) -> str:
         """Fetch NFO instruments once per day and return a normalized CSV snapshot."""
@@ -137,6 +151,79 @@ class KiteMarketDataAdapter:
             except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError(f"Malformed full quote for {key}: {exc}") from exc
         return ReadOnlyMarketSnapshot(received_at, tuple(result), tuple(missing))
+
+    def fetch_historical_candles(
+        self,
+        *,
+        exchange: str,
+        tradingsymbol: str,
+        instrument_token: int,
+        from_date: datetime,
+        to_date: datetime,
+        interval: str,
+        include_oi: bool = True,
+    ) -> tuple[MarketCandle, ...]:
+        """Fetch candles for a known token; expired-option availability is not implied."""
+        supported_intervals = {
+            "minute", "3minute", "5minute", "10minute",
+            "15minute", "30minute", "60minute", "day",
+        }
+        if interval not in supported_intervals:
+            raise ValueError(f"unsupported historical interval: {interval}")
+        if instrument_token <= 0:
+            raise ValueError("instrument_token must be positive")
+        for label, value in (("from_date", from_date), ("to_date", to_date)):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{label} must be timezone-aware")
+        if from_date >= to_date:
+            raise ValueError("from_date must be earlier than to_date")
+
+        self._historical_pacer.wait()
+        rows = self._client.historical_data(
+            instrument_token,
+            from_date,
+            to_date,
+            interval,
+            continuous=False,
+            oi=include_oi,
+        )
+        candles: list[MarketCandle] = []
+        for index, row in enumerate(rows):
+            timestamp = row.get("date")
+            if not isinstance(timestamp, datetime):
+                raise ValueError(f"historical candle {index} has no datetime timestamp")
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ValueError(f"historical candle {index} timestamp is naive")
+            try:
+                prices = {
+                    field: Decimal(str(row[field]))
+                    for field in ("open", "high", "low", "close")
+                }
+                volume = int(row.get("volume", 0))
+                oi_raw = row.get("oi")
+                open_interest = int(oi_raw) if oi_raw is not None else None
+                candles.append(
+                    MarketCandle(
+                        exchange=exchange.upper(),
+                        tradingsymbol=tradingsymbol.upper(),
+                        instrument_token=instrument_token,
+                        interval=interval,
+                        timestamp=timestamp,
+                        open=prices["open"],
+                        high=prices["high"],
+                        low=prices["low"],
+                        close=prices["close"],
+                        volume=volume,
+                        open_interest=open_interest,
+                    )
+                )
+            except (KeyError, TypeError, ValueError, InvalidOperation) as exc:
+                raise ValueError(f"malformed historical candle {index}: {exc}") from exc
+        candles.sort(key=lambda candle: candle.timestamp)
+        if len({candle.timestamp for candle in candles}) != len(candles):
+            raise ValueError("historical response contains duplicate candle timestamps")
+        return tuple(candles)
+
 
 
 def create_kite_ticker(api_key: str, access_token: str) -> Any:
