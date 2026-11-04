@@ -17,17 +17,29 @@ class InstrumentParseResult:
     errors: tuple[str, ...]
 
 
-def parse_kite_instruments(csv_text: str, *, underlyings: Iterable[str] | None = None) -> InstrumentParseResult:
-    """Parse Kite's daily instrument CSV. Store identity by exchange + tradingsymbol.
+def parse_kite_instruments(
+    csv_text: str,
+    *,
+    underlyings: Iterable[str] | None = None,
+) -> InstrumentParseResult:
+    """Parse Kite's daily instrument CSV, selecting NFO-OPT CE/PE rows.
 
-    The instrument token is retained for streaming, but must not be treated as a
-    permanent contract identity because derivative tokens may be reused.
+    Treat exchange + trading symbol as the natural key. Instrument tokens are
+    retained for live subscriptions but are not permanent historical identities.
     """
     allowed = {item.upper() for item in underlyings} if underlyings is not None else None
     reader = csv.DictReader(io.StringIO(csv_text))
     required = {
-        "instrument_token", "tradingsymbol", "name", "expiry", "strike",
-        "tick_size", "lot_size", "instrument_type", "segment", "exchange",
+        "instrument_token",
+        "tradingsymbol",
+        "name",
+        "expiry",
+        "strike",
+        "tick_size",
+        "lot_size",
+        "instrument_type",
+        "segment",
+        "exchange",
     }
     if reader.fieldnames is None or not required.issubset(set(reader.fieldnames)):
         missing = sorted(required - set(reader.fieldnames or []))
@@ -71,5 +83,5 @@ def parse_kite_instruments(csv_text: str, *, underlyings: Iterable[str] | None =
             rejected += 1
             errors.append(f"line {line_number}: {exc}")
 
-    contracts.sort(key=lambda c: (c.underlying, c.expiry, c.strike, c.option_type))
+    contracts.sort(key=lambda item: (item.underlying, item.expiry, item.strike, item.option_type))
     return InstrumentParseResult(tuple(contracts), rejected, tuple(errors))
