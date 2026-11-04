@@ -96,3 +96,28 @@ class PaperTrade(Base):
     net_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
     entry_reason: Mapped[str] = mapped_column(String(2048), default="")
     exit_reason: Mapped[str] = mapped_column(String(2048), default="")
+
+
+
+class CandleSnapshot(Base):
+    __tablename__ = "candle_snapshots"
+    __table_args__ = (
+        UniqueConstraint("exchange", "tradingsymbol", "interval", "timestamp"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(12), index=True)
+    tradingsymbol: Mapped[str] = mapped_column(String(64), index=True)
+    instrument_token: Mapped[int] = mapped_column(Integer)
+    interval: Mapped[str] = mapped_column(String(12), index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+    open: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    high: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    low: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    close: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    volume: Mapped[int] = mapped_column(Integer)
+    open_interest: Mapped[int | None] = mapped_column(Integer)
