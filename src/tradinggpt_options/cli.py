@@ -8,19 +8,19 @@ from zoneinfo import ZoneInfo
 
 from tradinggpt_options.config.settings import Settings, get_settings
 from tradinggpt_options.data.collector import KiteOptionsCollector
-from tradinggpt_options.data.models import assess_quote_quality
 from tradinggpt_options.data.kite_adapter import (
     KiteMarketDataAdapter,
     create_kite_ticker,
 )
+from tradinggpt_options.data.models import assess_quote_quality
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
 from tradinggpt_options.options.chain import (
     select_near_atm_contracts,
     select_nearest_expiry,
 )
 from tradinggpt_options.options.chain_analytics import build_option_chain_view
-from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
 from tradinggpt_options.research.baseline import analyze_baseline
+from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
 from tradinggpt_options.storage.repository import MarketDataRepository
 
 MARKET_TIMEZONE = ZoneInfo("Asia/Kolkata")
