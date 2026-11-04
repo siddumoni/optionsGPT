@@ -34,3 +34,29 @@ def test_iv_returns_none_for_nonpositive_premium() -> None:
         risk_free_rate=0.05, option_type="CE",
     )
     assert iv is None
+
+
+def test_greeks_reject_non_finite_inputs() -> None:
+    with pytest.raises(ValueError):
+        black_scholes_greeks(
+            spot=float("nan"),
+            strike=100,
+            time_to_expiry_years=0.5,
+            risk_free_rate=0.05,
+            volatility=0.2,
+            option_type="CE",
+        )
+
+
+def test_iv_rejects_invalid_volatility_bracket() -> None:
+    with pytest.raises(ValueError):
+        implied_volatility_bisection(
+            option_price=5,
+            spot=100,
+            strike=100,
+            time_to_expiry_years=0.5,
+            risk_free_rate=0.05,
+            option_type="CE",
+            low_vol=0.5,
+            high_vol=0.2,
+        )
