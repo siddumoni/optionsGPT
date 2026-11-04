@@ -79,6 +79,8 @@ Open http://127.0.0.1:8000/docs.
 - GET /health — application and paper/live-mode status
 - GET /api/v1/paper/account — persistent paper-account summary
 - GET /api/v1/paper/trades?status=all|open|closed — trade history
+- GET /api/v1/market/instruments?underlying=NIFTY — latest persisted option contracts
+- GET /api/v1/market/quotes?limit=100 — latest persisted quote per contract, including full depth
 
 There is no HTTP order-placement endpoint. The paper account is initialized by the CLI or local paper broker, not by a read-only API request.
 
@@ -95,7 +97,7 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 - Premium-risk lot sizing
 - Local long-option paper broker with ask-side entries and bid-side exits
 - Bid-side mark-to-market equity, stale/missing quote rejection and duplicate-open-trade protection
-- Read-only paper account and trade-history API endpoints
+- Read-only paper account, trade-history, instrument-master and latest-quote API endpoints
 - GitHub Actions lint/test matrix for Python 3.12 and 3.13
 
 ## Known limitations
