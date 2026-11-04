@@ -55,3 +55,21 @@ def test_charge_schedule_rejects_invalid_inputs_and_rates() -> None:
         )
     with pytest.raises(ValueError, match="nonnegative"):
         NseOptionsChargeSchedule(stt_sell_rate=Decimal("-0.1"))
+
+
+def test_stt_rounds_to_nearest_whole_rupee() -> None:
+    schedule = NseOptionsChargeSchedule()
+    rounds_up = schedule.calculate_order_charges(
+        premium=Decimal("1000"),
+        quantity=1,
+        side="SELL",
+        trade_date=date(2026, 11, 4),
+    )
+    rounds_down = schedule.calculate_order_charges(
+        premium=Decimal("300"),
+        quantity=1,
+        side="SELL",
+        trade_date=date(2026, 11, 4),
+    )
+    assert rounds_up.stt == Decimal("2")
+    assert rounds_down.stt == Decimal("0")
