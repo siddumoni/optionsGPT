@@ -9,6 +9,7 @@ from tradinggpt_options.config.settings import Settings
 from tradinggpt_options.data.models import DepthLevel, OptionContract, OptionQuote
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
 from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
+from tradinggpt_options.storage.tables import InstrumentSnapshot, QuoteSnapshot
 
 
 def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
@@ -55,6 +56,41 @@ def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
             open_interest=1000,
         )
         broker.buy_to_open(contract=contract, quote=quote, lots=1, now=now)
+        session.add(
+            InstrumentSnapshot(
+                snapshot_date=date(2026, 11, 4),
+                exchange="NFO",
+                tradingsymbol=contract.tradingsymbol,
+                instrument_token=contract.instrument_token,
+                underlying="NIFTY",
+                expiry=contract.expiry,
+                strike=contract.strike,
+                option_type=contract.option_type,
+                lot_size=contract.lot_size,
+                tick_size=contract.tick_size,
+            )
+        )
+        session.add(
+            QuoteSnapshot(
+                exchange="NFO",
+                tradingsymbol=contract.tradingsymbol,
+                instrument_token=contract.instrument_token,
+                exchange_timestamp=now,
+                received_at=now,
+                last_price=Decimal("100"),
+                best_bid=Decimal("99.9"),
+                best_ask=Decimal("100.1"),
+                bid_quantity=100,
+                ask_quantity=100,
+                bid_depth_json='[{"price":"99.9","quantity":100,"orders":1}]',
+                ask_depth_json='[{"price":"100.1","quantity":100,"orders":1}]',
+                volume=100,
+                open_interest=1000,
+                source="kite",
+                quality_flags="",
+            )
+        )
+        session.commit()
     engine.dispose()
 
     with TestClient(app) as client:
@@ -68,3 +104,11 @@ def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
         assert len(trades.json()) == 1
         assert trades.json()[0]["option_type"] == "CE"
         assert trades.json()[0]["entry_at"].endswith("+00:00")
+        instruments = client.get("/api/v1/market/instruments?underlying=nifty")
+        assert instruments.status_code == 200
+        assert instruments.json()[0]["tradingsymbol"] == contract.tradingsymbol
+        quotes = client.get("/api/v1/market/quotes")
+        assert quotes.status_code == 200
+        assert quotes.json()[0]["bid_depth"][0]["price"] == "99.9"
+        assert quotes.json()[0]["ask_depth"][0]["quantity"] == 100
+        assert client.get("/api/v1/market/quotes?limit=501").status_code == 422
