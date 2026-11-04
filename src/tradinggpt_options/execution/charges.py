@@ -59,7 +59,7 @@ class NseOptionsChargeSchedule:
 
     effective_from: date = date(2026, 4, 1)
     brokerage_per_order: Decimal = Decimal("20")
-    exchange_transaction_rate: Decimal = Decimal("0.0003553")
+    exchange_transaction_rate: Decimal = Decimal("0.000355299")
     sebi_turnover_rate: Decimal = Decimal("0.000001")
     ipft_turnover_rate: Decimal = Decimal("0.000000001")
     stt_sell_rate: Decimal = Decimal("0.0015")
