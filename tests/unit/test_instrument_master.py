@@ -26,3 +26,12 @@ def test_rejects_duplicate_exchange_symbol() -> None:
     result = parse_kite_instruments(HEADER + line + line)
     assert len(result.contracts) == 1
     assert result.rejected_rows == 1
+
+
+def test_rejects_option_row_without_expiry() -> None:
+    line = (
+        "126,4,NIFTY26NOV25000CE,NIFTY,0,,25000,0.05,65,CE,NFO-OPT,NFO\\n"
+    )
+    result = parse_kite_instruments(HEADER + line)
+    assert result.contracts == ()
+    assert result.rejected_rows == 1
