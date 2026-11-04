@@ -76,6 +76,64 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return normalized.isoformat()
 
+    @application.get("/api/v1/research/decisions", tags=["research"])
+    def research_decisions(limit: int = 50) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 200:
+            raise HTTPException(
+                status_code=422,
+                detail="limit must be between 1 and 200",
+            )
+        with session_factory() as session:
+            rows = session.scalars(
+                select(StrategyDecisionSnapshot)
+                .order_by(StrategyDecisionSnapshot.snapshot_at.desc())
+                .limit(limit)
+            ).all()
+            return [
+                {
+                    "id": row.id,
+                    "snapshot_at": row.snapshot_at.isoformat(),
+                    "underlying": row.underlying,
+                    "expiry": row.expiry.isoformat(),
+                    "decision": row.decision,
+                    "confidence_score": (
+                        float(row.confidence_score)
+                        if row.confidence_score is not None else None
+                    ),
+                    "estimated_win_probability": (
+                        float(row.estimated_win_probability)
+                        if row.estimated_win_probability is not None else None
+                    ),
+                    "model_version": row.model_version,
+                    "spot_price": decimal_string(row.spot_price),
+                    "risk_free_rate": decimal_string(row.risk_free_rate),
+                    "candle_source": row.candle_source,
+                    "candle_count": row.candle_count,
+                    "candidate_symbol": row.candidate_symbol,
+                    "candidate_strike": (
+                        decimal_string(row.candidate_strike)
+                        if row.candidate_strike is not None else None
+                    ),
+                    "candidate_option_type": row.candidate_option_type,
+                    "candidate_mid": (
+                        decimal_string(row.candidate_mid)
+                        if row.candidate_mid is not None else None
+                    ),
+                    "candidate_iv": (
+                        float(row.candidate_iv)
+                        if row.candidate_iv is not None else None
+                    ),
+                    "candidate_delta": (
+                        float(row.candidate_delta)
+                        if row.candidate_delta is not None else None
+                    ),
+                    "rationale": json.loads(row.rationale_json),
+                    "opposing_evidence": json.loads(row.opposing_evidence_json),
+                    "warnings": json.loads(row.warnings_json),
+                }
+                for row in rows
+            ]
+
     @application.get("/api/v1/paper/account", tags=["paper"])
     def paper_account() -> dict[str, Any]:
         """Read the persistent paper account. Does not create or place trades."""
