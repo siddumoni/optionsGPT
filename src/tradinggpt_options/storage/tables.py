@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -51,6 +52,8 @@ class QuoteSnapshot(Base):
     best_ask: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     bid_quantity: Mapped[int | None] = mapped_column(Integer)
     ask_quantity: Mapped[int | None] = mapped_column(Integer)
+    bid_depth_json: Mapped[str] = mapped_column(Text, default="[]")
+    ask_depth_json: Mapped[str] = mapped_column(Text, default="[]")
     volume: Mapped[int | None] = mapped_column(Integer)
     open_interest: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(32), default="kite")
