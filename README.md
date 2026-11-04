@@ -72,7 +72,7 @@ Backfill historical underlying candles (use timezone-aware timestamps):
 tradinggpt-options backfill-underlying --underlyings NIFTY,BANKNIFTY --from-date "2026-11-03T09:15:00+05:30" --to-date "2026-11-04T15:30:00+05:30" --interval 5minute
 ```
 
-This stores underlying OHLCV/OI candles in a separate table. It does not create historical option premiums. Kite's continuous-history feature is for futures; do not treat it as an expired-options archive.
+This resolves the nearest non-expired NFO future and stores its volume-backed OHLCV/OI candles in a separate table. It does not create historical option premiums. Kite's continuous-history feature is for futures; do not treat it as an expired-options archive.
 
 
 Run one read-only analysis pass:
