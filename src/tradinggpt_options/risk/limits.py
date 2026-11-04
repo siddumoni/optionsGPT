@@ -12,12 +12,20 @@ class RiskLimits:
     max_capital_utilization: Decimal = Decimal("1.0")
 
     def __post_init__(self) -> None:
-        if self.max_position_loss <= 0 or self.max_daily_loss <= 0:
-            raise ValueError("loss limits must be positive")
+        if (
+            not self.max_position_loss.is_finite()
+            or not self.max_daily_loss.is_finite()
+            or self.max_position_loss <= 0
+            or self.max_daily_loss <= 0
+        ):
+            raise ValueError("loss limits must be finite and positive")
         if self.max_concurrent_positions < 1:
             raise ValueError("max_concurrent_positions must be >= 1")
-        if not Decimal("0") < self.max_capital_utilization <= Decimal("1"):
-            raise ValueError("max_capital_utilization must be in (0, 1]")
+        if (
+            not self.max_capital_utilization.is_finite()
+            or not Decimal("0") < self.max_capital_utilization <= Decimal("1")
+        ):
+            raise ValueError("max_capital_utilization must be finite and in (0, 1]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +48,15 @@ def size_long_option_position(
     current_open_positions: int = 0,
 ) -> SizingResult:
     """Bound long-option premium exposure by risk and available cash."""
-    if available_cash <= 0 or premium_per_unit <= 0 or lot_size <= 0:
+    if (
+        not available_cash.is_finite()
+        or not premium_per_unit.is_finite()
+        or not current_daily_net_pnl.is_finite()
+        or available_cash <= 0
+        or premium_per_unit <= 0
+        or lot_size <= 0
+        or current_open_positions < 0
+    ):
         return SizingResult(
             False, 0, 0, Decimal("0"), Decimal("0"), "invalid capital/premium/lot"
         )
