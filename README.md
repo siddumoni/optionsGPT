@@ -66,6 +66,14 @@ The collector fetches the daily NFO master, obtains fresh underlying spot quotes
 
 The collector is read-only: it does not submit, modify or cancel broker orders. It requires a valid daily Kite access token. Do not share credentials in chat or commit .env.
 
+Backfill historical underlying candles (use timezone-aware timestamps):
+
+```powershell
+tradinggpt-options backfill-underlying --underlyings NIFTY,BANKNIFTY --from-date "2026-11-03T09:15:00+05:30" --to-date "2026-11-04T15:30:00+05:30" --interval 5minute
+```
+
+This stores underlying OHLCV/OI candles in a separate table. It does not create historical option premiums. Kite's continuous-history feature is for futures; do not treat it as an expired-options archive.
+
 The CLI runs continuously until stopped. It does not yet provide a Windows service/task scheduler wrapper or automatic daily token generation.
 
 ## Run the API
