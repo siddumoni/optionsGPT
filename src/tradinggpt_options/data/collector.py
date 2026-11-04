@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
@@ -15,7 +15,7 @@ from tradinggpt_options.data.kite_adapter import (
     KiteTickerClient,
     KiteWebSocketSession,
 )
-from tradinggpt_options.data.models import OptionContract, OptionQuote, assess_quote_quality
+from tradinggpt_options.data.models import OptionContract, assess_quote_quality
 from tradinggpt_options.data.quote_parser import parse_kite_tick
 from tradinggpt_options.storage.repository import MarketDataRepository
 
