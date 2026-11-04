@@ -269,11 +269,27 @@ def collect_options(
             time.sleep(1)
             if time.monotonic() >= next_report:
                 status = collector.status()
+                last_tick = (
+                    status.last_tick_at.astimezone(MARKET_TIMEZONE).strftime("%H:%M:%S")
+                    if status.last_tick_at is not None else "never"
+                )
+                tick_age = (
+                    (datetime.now(UTC) - status.last_tick_at).total_seconds()
+                    if status.last_tick_at is not None else None
+                )
+                feed_health = (
+                    "NO_TICKS"
+                    if tick_age is None
+                    else "FRESH"
+                    if tick_age <= 15
+                    else "STALE"
+                )
                 print(
                     f"[{datetime.now(MARKET_TIMEZONE):%H:%M:%S}] "
-                    f"state={status.state} ticks={status.received_ticks} "
-                    f"saved={status.persisted_quotes} rejected={status.rejected_ticks} "
-                    f"unknown={status.unknown_tokens} error={status.last_error or '-'}"
+                    f"state={status.state} feed={feed_health} last_tick={last_tick} "
+                    f"ticks={status.received_ticks} saved={status.persisted_quotes} "
+                    f"rejected={status.rejected_ticks} unknown={status.unknown_tokens} "
+                    f"error={status.last_error or '-'}"
                 )
                 next_report = time.monotonic() + 30
     except KeyboardInterrupt:
