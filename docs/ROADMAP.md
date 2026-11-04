@@ -1,7 +1,7 @@
 # Delivery roadmap
 
 1. **Data foundation:** instrument master ingestion, contract identity, quote snapshots with full depth, historical OHLCV candles, WebSocket lifecycle, persistence and quality checks. Core read-only collection is implemented; unattended service supervision and scheduled backfills remain.
-2. **Options analytics:** option-chain snapshots, IV and Greeks with explicit model assumptions, expiry/strike selection, OI changes and liquidity/spread filters.
+2. **Options analytics:** nearest-expiry/ATM selection, quality-aware CE/PE chain view, mid-price IV, spread and European BSM Greeks are implemented as a view builder. Remaining: persisted chain snapshots, OI changes, liquidity filters and model calibration.
 3. **Research:** market regime, underlying multi-timeframe signals, event/news ingestion, transparent strategy registry and calibrated probability evaluation.
 4. **Backtesting:** contract-level option data, charge schedule reconciliation, spread/slippage, walk-forward and out-of-sample evaluation. The first effective-dated Zerodha/NSE charge schedule is implemented; historical options data must be archived before expiry or sourced separately.
 5. **Paper execution:** virtual ledger, conservative fills, partial-fill model, automated exits, restart recovery, daily loss and capital circuit breakers, audit journal.
