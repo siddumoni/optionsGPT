@@ -67,3 +67,62 @@ def select_atm_strike(
     if not eligible:
         return None
     return min(eligible, key=lambda pair: (abs(pair.strike - underlying_price), pair.strike))
+
+
+def select_near_atm_contracts(
+    contracts: Iterable[OptionContract],
+    *,
+    spot_prices: dict[str, Decimal],
+    strikes_each_side: int = 3,
+) -> tuple[OptionContract, ...]:
+    """Select both CE and PE contracts around ATM for each supplied underlying.
+
+    Only the nearest non-expired expiry is selected for each underlying. The
+    selector uses a caller-supplied spot snapshot so it can work with any
+    validated underlying-price source; it never guesses missing spot prices.
+    """
+    if strikes_each_side < 0:
+        raise ValueError("strikes_each_side cannot be negative")
+    by_underlying: dict[str, list[OptionContract]] = defaultdict(list)
+    for contract in contracts:
+        by_underlying[contract.underlying.upper()].append(contract)
+
+    selected: list[OptionContract] = []
+    for underlying, spot in spot_prices.items():
+        key = underlying.upper()
+        if not spot.is_finite() or spot <= 0:
+            raise ValueError(f"spot price for {key} must be finite and positive")
+        universe = by_underlying.get(key, [])
+        if not universe:
+            continue
+        expiry = select_nearest_expiry(universe, as_of=date.today())
+        if expiry is None:
+            continue
+        expiry_contracts = [item for item in universe if item.expiry == expiry]
+        strikes = sorted({item.strike for item in expiry_contracts})
+        if not strikes:
+            continue
+        atm_index = min(
+            range(len(strikes)),
+            key=lambda index: (abs(strikes[index] - spot), strikes[index]),
+        )
+        start = max(0, atm_index - strikes_each_side)
+        end = min(len(strikes), atm_index + strikes_each_side + 1)
+        selected_strikes = set(strikes[start:end])
+        selected.extend(
+            item
+            for item in expiry_contracts
+            if item.strike in selected_strikes
+        )
+
+    return tuple(
+        sorted(
+            selected,
+            key=lambda item: (
+                item.underlying,
+                item.expiry,
+                item.strike,
+                item.option_type,
+            ),
+        )
+    )
