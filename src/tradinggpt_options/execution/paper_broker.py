@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import uuid4
 
@@ -45,7 +45,13 @@ class PaperBroker:
     statutory charge schedule is implemented and independently verified.
     """
 
-    def __init__(self, session: Session, *, account_name: str, config: PaperExecutionConfig) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        account_name: str,
+        config: PaperExecutionConfig,
+    ) -> None:
         if not account_name.strip():
             raise ValueError("account_name is required")
         self.session = session
@@ -152,7 +158,11 @@ class PaperBroker:
         )
         self.session.commit()
         return PaperFill(
-            trade_id, "OPEN", quantity, ask, account.cash_balance,
+            trade_id,
+            "OPEN",
+            quantity,
+            ask,
+            account.cash_balance,
             "paper buy filled at best ask",
         )
 
@@ -201,7 +211,11 @@ class PaperBroker:
         account.cash_balance += proceeds - exit_charge
         self.session.commit()
         return PaperFill(
-            trade.id, "CLOSED", trade.quantity, bid, account.cash_balance,
+            trade.id,
+            "CLOSED",
+            trade.quantity,
+            bid,
+            account.cash_balance,
             "paper sell filled at best bid",
         )
 
@@ -226,3 +240,21 @@ class PaperBroker:
 
     def cash_balance(self) -> Decimal:
         return self._account().cash_balance
+
+    def equity(self, quotes: dict[tuple[str, str], OptionQuote], *, now: datetime) -> Decimal:
+        """Mark open long positions conservatively at bid; missing/stale quotes fail closed."""
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        value = self.cash_balance()
+        for trade in self.open_trades():
+            quote = quotes.get((trade.exchange, trade.tradingsymbol))
+            if quote is None:
+                raise ValueError(f"missing mark quote for {trade.tradingsymbol}")
+            self._validate_quote(quote, now=now)
+            if quote.best_bid is None:
+                raise ValueError(f"missing bid for {trade.tradingsymbol}")
+            position_value = (quote.best_bid * trade.quantity).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            value += position_value
+        return value
