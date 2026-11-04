@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from tradinggpt_options.data.models import DepthLevel, OptionContract, OptionQuote
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
+from tradinggpt_options.risk.limits import RiskLimits
 from tradinggpt_options.storage.database import Base
 
 
@@ -24,6 +25,12 @@ def setup_broker(
         config=PaperExecutionConfig(
             initial_capital=Decimal("100000"),
             charges_per_side=charges_per_side,
+            risk_limits=RiskLimits(
+                max_position_loss=Decimal("10000"),
+                max_daily_loss=Decimal("10000"),
+                max_concurrent_positions=3,
+                max_capital_utilization=Decimal("1.0"),
+            ),
         ),
     )
     contract = OptionContract(
