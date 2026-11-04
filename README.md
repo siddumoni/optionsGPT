@@ -118,7 +118,7 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 - European Black–Scholes Greeks, implied-volatility bisection solver, quality-aware CE/PE chain view and explainable EMA/VWAP/RSI/volume baseline analysis CLI
 - SQLite models/repository for instrument snapshots, quote snapshots, paper accounts and trades
 - Premium-risk lot sizing
-- Local long-option paper broker with depth-aware VWAP entries/exits, insufficient-depth rejection and effective-dated Zerodha/NSE option charges
+- Local long-option paper broker with depth-aware VWAP entries/exits, insufficient-depth rejection, effective-dated Zerodha/NSE charges and mandatory premium/daily-loss/concurrent-position risk limits
 - Bid-side mark-to-market equity, stale/missing quote rejection and duplicate-open-trade protection
 - Read-only paper account, trade-history, instrument-master and latest-quote API endpoints
 - GitHub Actions lint/test matrix for Python 3.12 and 3.13
