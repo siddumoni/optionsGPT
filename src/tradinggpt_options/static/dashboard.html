@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TradingGPT Options — Paper Dashboard</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background:#0b1020; color:#e7ecf5; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:28px; max-width:1500px; margin-inline:auto; }
+    header { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:22px; }
+    h1 { font-size:24px; margin:0 0 5px; }
+    .muted { color:#8d9ab1; font-size:13px; }
+    .pill { border:1px solid #315d4b; color:#8de0ae; background:#10251d; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:700; letter-spacing:.04em; }
+    button { border:1px solid #34415b; color:#e7ecf5; background:#172238; border-radius:9px; padding:9px 14px; cursor:pointer; }
+    button:hover { background:#22314c; }
+    .grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+    .card, section { background:#111a2d; border:1px solid #26334c; border-radius:13px; }
+    .card { padding:16px; min-height:104px; }
+    .card .label { color:#9aa8bf; font-size:12px; margin-bottom:12px; }
+    .card .value { font-size:23px; font-weight:700; font-variant-numeric:tabular-nums; }
+    section { padding:17px; margin-bottom:17px; overflow:hidden; }
+    h2 { font-size:15px; margin:0 0 14px; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .section-head h2 { margin:0; }
+    .table-wrap { overflow:auto; }
+    table { width:100%; border-collapse:collapse; white-space:nowrap; font-size:12px; }
+    th,td { text-align:left; padding:10px 9px; border-bottom:1px solid #26334c; }
+    th { color:#9aa8bf; font-weight:600; }
+    td { color:#e0e7f2; font-variant-numeric:tabular-nums; }
+    .positive { color:#78d9a1; }
+    .negative { color:#ff9292; }
+    .warning { color:#f3c978; }
+    .empty { color:#9aa8bf; padding:18px 4px; font-size:13px; }
+    .footer { color:#75839b; font-size:11px; text-align:right; padding:4px 2px 14px; }
+    @media(max-width:900px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} body{padding:17px;} }
+    @media(max-width:520px){ .grid{grid-template-columns:1fr 1fr;} .card .value{font-size:18px;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>TradingGPT Options</h1>
+      <div class="muted">Local market-data and paper-trading monitor</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="pill">PAPER ONLY · NO LIVE ORDERS</span>
+      <button id="refresh">Refresh</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card"><div class="label">Paper capital</div><div class="value" id="capital">—</div></div>
+    <div class="card"><div class="label">Available cash</div><div class="value" id="cash">—</div></div>
+    <div class="card"><div class="label">Realized net P&amp;L</div><div class="value" id="pnl">—</div></div>
+    <div class="card"><div class="label">Open positions</div><div class="value" id="positions">—</div></div>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>Latest market quotes</h2>
+      <span class="muted" id="quote-count">—</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Contract</th><th>LTP</th><th>Best bid</th><th>Best ask</th><th>Volume</th><th>Open interest</th><th>Received</th><th>Quality</th></tr></thead>
+        <tbody id="quotes"><tr><td colspan="8" class="empty">Loading quotes…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Research decision journal</h2>
+      <span class="muted" id="decision-count">Heuristic score is not a probability</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Underlying</th><th>Expiry</th><th>Decision</th><th>Score</th><th>Candidate</th><th>Delta</th><th>IV</th><th>Evidence</th></tr></thead>
+        <tbody id="decisions"><tr><td colspan="9" class="empty">No analysis decisions recorded yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Paper trade journal</h2>
+      <span class="muted" id="trade-count">—</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Contract</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>Status</th><th>Gross P&amp;L</th><th>Charges</th><th>Net P&amp;L</th></tr></thead>
+        <tbody id="trades"><tr><td colspan="9" class="empty">Loading trades…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer" id="updated">Waiting for first refresh…</div>
+
+  <script>
+    const currency = new Intl.NumberFormat("en-IN", { style:"currency", currency:"INR", maximumFractionDigits:2 });
+    const number = new Intl.NumberFormat("en-IN");
+    const byId = id => document.getElementById(id);
+    const money = value => value == null ? "—" : currency.format(Number(value));
+    const text = (element, value) => { element.textContent = value ?? "—"; };
+    const cell = (row, value, className="") => {
+      const td = document.createElement("td");
+      td.textContent = value == null || value === "" ? "—" : String(value);
+      if (className) td.className = className;
+      row.appendChild(td);
+    };
+    const time = value => value ? new Date(value).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", second:"2-digit" }) : "—";
+    const pnlClass = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : "";
+
+    async function getJson(path) {
+      const response = await fetch(path, { cache:"no-store" });
+      if (!response.ok) throw new Error(path + " returned HTTP " + response.status);
+      return response.json();
+    }
+
+    async function refresh() {
+      byId("refresh").disabled = true;
+      try {
+        const [health, quotes, decisions] = await Promise.all([
+          getJson("/health"),
+          getJson("/api/v1/market/quotes?limit=100"),
+          getJson("/api/v1/research/decisions?limit=30")
+        ]);
+        const quoteBody = byId("quotes");
+        quoteBody.replaceChildren();
+        text(byId("quote-count"), quotes.length + " contracts · " + health.trading_mode);
+        if (!quotes.length) {
+          const tr = quoteBody.insertRow();
+          cell(tr, "No persisted quotes yet. Start collect-options or analyze-options.", "empty");
+        } else {
+          for (const quote of quotes) {
+            const tr = quoteBody.insertRow();
+            cell(tr, quote.tradingsymbol);
+            cell(tr, money(quote.last_price));
+            cell(tr, money(quote.best_bid));
+            cell(tr, money(quote.best_ask));
+            cell(tr, quote.volume == null ? "—" : number.format(quote.volume));
+            cell(tr, quote.open_interest == null ? "—" : number.format(quote.open_interest));
+            cell(tr, time(quote.received_at));
+            const quality = quote.quality_flags?.length ? quote.quality_flags.join(", ") : "OK";
+            cell(tr, quality, quote.quality_flags?.length ? "warning" : "positive");
+          }
+        }
+
+        const decisionBody = byId("decisions");
+        decisionBody.replaceChildren();
+        text(byId("decision-count"), decisions.length + " decisions · score is not a probability");
+        if (!decisions.length) {
+          const tr = decisionBody.insertRow();
+          cell(tr, "No decisions yet. Run analyze-options to create an auditable research record.", "empty");
+        } else {
+          for (const decision of decisions) {
+            const tr = decisionBody.insertRow();
+            cell(tr, time(decision.snapshot_at));
+            cell(tr, decision.underlying);
+            cell(tr, decision.expiry);
+            cell(tr, decision.decision, decision.decision === "NO_TRADE" ? "warning" : "positive");
+            cell(tr, decision.confidence_score == null ? "—" : decision.confidence_score.toFixed(1));
+            cell(tr, decision.candidate_symbol);
+            cell(tr, decision.candidate_delta == null ? "—" : decision.candidate_delta.toFixed(3));
+            cell(tr, decision.candidate_iv == null ? "—" : (decision.candidate_iv * 100).toFixed(2) + "%");
+            cell(tr, (decision.rationale || []).join(" · "));
+          }
+        }
+
+        try {
+          const account = await getJson("/api/v1/paper/account");
+          text(byId("capital"), money(account.initial_capital));
+          text(byId("cash"), money(account.cash_balance));
+          text(byId("pnl"), money(account.realized_net_pnl));
+          byId("pnl").className = "value " + pnlClass(account.realized_net_pnl);
+          text(byId("positions"), number.format(account.open_positions));
+        } catch (error) {
+          text(byId("capital"), "Not initialized");
+          text(byId("cash"), "—");
+          text(byId("pnl"), "—");
+          text(byId("positions"), "—");
+        }
+
+        const trades = await getJson("/api/v1/paper/trades?status=all");
+        const tradeBody = byId("trades");
+        tradeBody.replaceChildren();
+        text(byId("trade-count"), trades.length + " trades");
+        if (!trades.length) {
+          const tr = tradeBody.insertRow();
+          cell(tr, "No paper trades recorded yet.", "empty");
+        } else {
+          for (const trade of trades) {
+            const tr = tradeBody.insertRow();
+            cell(tr, trade.tradingsymbol);
+            cell(tr, trade.option_type);
+            cell(tr, number.format(trade.quantity));
+            cell(tr, money(trade.entry_premium));
+            cell(tr, money(trade.exit_premium));
+            cell(tr, trade.status);
+            cell(tr, money(trade.gross_pnl), pnlClass(trade.gross_pnl));
+            cell(tr, money(trade.charges));
+            cell(tr, money(trade.net_pnl), pnlClass(trade.net_pnl));
+          }
+        }
+        text(byId("updated"), "Last updated " + new Date().toLocaleString("en-IN") + " · Refreshes every 10 seconds");
+      } catch (error) {
+        text(byId("updated"), "Dashboard error: " + error.message);
+      } finally {
+        byId("refresh").disabled = false;
+      }
+    }
+
+    byId("refresh").addEventListener("click", refresh);
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>

@@ -1,49 +1,29 @@
 # TradingGPT Options
 
-An independent research and paper-trading platform for NSE index and stock options using Zerodha Kite Connect market data.
+Independent NSE index and stock-options research and paper-trading platform using Zerodha Kite Connect market data.
 
-> **Safety:** This repository starts in paper-only mode. No live order placement is implemented. Do not add live execution without a separately reviewed design, broker/exchange compliance checks, explicit approval, and dedicated safety tests.
+> **Safety:** This application is paper-only. It has no Kite order-placement path. Do not add live execution without separate architecture review, current broker/exchange compliance checks, explicit user approval and dedicated safety tests.
 
-## Project principles
+## Principles
 
-- Independent from `tradinggpt`; that repository is a reference only.
-- No imports, shared database, shared runtime state, or shared configuration with the cash-equity project.
-- Options-specific data model and accounting.
-- Live market-data capture before claiming historical options backtest capability.
-- No fabricated historical option prices, Greeks, news, fills, or performance.
-- A model confidence score is not a calibrated probability.
-- `NO_TRADE` is a valid and expected decision.
+- The existing cash-equity tradinggpt repository is an engineering reference only; this repository shares no code, database, configuration or runtime state with it.
+- Start with long CE/PE paper trades only.
+- Preserve market-data provenance and exchange contract identity.
+- Distinguish observed data, calculations, estimates and model predictions.
+- Never fabricate option prices, historical trades, fills, Greeks or returns.
+- NO_TRADE is a valid system decision.
+- Confidence scores are not calibrated probabilities.
 
-## Initial configuration
+## Environment
 
-- Market: NSE F&O
-- Instruments: eligible index and stock options
-- Initial strategy scope: long CE / long PE only
-- Default virtual capital: INR 100,000
-- Execution: paper only
-- Database: SQLite for development
-- Backend: Python + FastAPI
-- Dashboard: API-first; UI choice follows the first working data vertical slice
+- NSE F&O
+- ₹1,00,000 initial virtual capital by default
+- Python 3.12 and 3.13
+- SQLite for local development
+- FastAPI backend
+- Kite Connect read-only market-data integration
 
-## Repository layout
-
-```text
-src/tradinggpt_options/
-  api/                 FastAPI application
-  config/              Typed settings and safety defaults
-  data/                Broker adapters, instruments and market-data capture
-  options/             Chain, IV, Greeks, expiry and strike selection
-  research/            Signals, regime detection and probability calibration
-  backtesting/         Historical option-contract backtesting
-  execution/           Paper broker, fills and position lifecycle
-  risk/                Independent capital and loss controls
-  storage/             Database models and repositories
-  reporting/           Session reports and decision journal
-tests/
-  unit/
-  integration/
-  contract/
-```
+Create a local .env from .env.example. Never commit API keys, access tokens or secrets.
 
 ## Windows 11 setup
 
@@ -56,7 +36,60 @@ Copy-Item .env.example .env
 pytest
 ```
 
-Python 3.12 is the initial compatibility target. Validate any move to a newer Python version against the chosen broker SDK and numerical dependencies before upgrading.
+Initialize the local paper account:
+
+```powershell
+tradinggpt-options init-paper-account
+```
+
+This only creates the local SQLite account and its starting virtual balance. It does not authenticate to a broker or send an order.
+
+## Collect live option quotes (read-only)
+
+Set these values in your local .env after creating a Kite Connect app and generating an access token:
+
+```dotenv
+KITE_API_KEY=your_api_key
+KITE_ACCESS_TOKEN=your_daily_access_token
+KITE_UNDERLYING_SPOT_INSTRUMENTS=NIFTY=NSE:NIFTY 50;BANKNIFTY=NSE:NIFTY BANK
+```
+
+Add one mapping per underlying. For stock options, the mapping usually uses the NSE cash symbol, for example `RELIANCE=NSE:RELIANCE`. For stock options, the underlying name must match the `name` field in Kite's NFO instrument master. Index underlyings with a blank name are resolved from known NFO symbol prefixes. Confirm exact spot symbols and exchanges in your Kite instrument master before use.
+
+Start collection:
+
+```powershell
+tradinggpt-options collect-options --underlyings NIFTY,BANKNIFTY --strikes-each-side 3
+```
+
+The collector fetches the daily NFO master, obtains fresh underlying spot quotes, selects the nearest non-expired expiry and the configured strike window around ATM, then subscribes to those CE/PE contracts in full WebSocket mode. It persists every received quote, including full bid/ask depth, and prints a 30-second health summary. Press Ctrl+C to stop.
+
+The collector is read-only: it does not submit, modify or cancel broker orders. It requires a valid daily Kite access token. Do not share credentials in chat or commit .env.
+
+Backfill historical underlying candles (use timezone-aware timestamps):
+
+```powershell
+tradinggpt-options backfill-underlying --underlyings NIFTY,BANKNIFTY --from-date "2026-11-03T09:15:00+05:30" --to-date "2026-11-04T15:30:00+05:30" --interval 5minute
+```
+
+This resolves the nearest non-expired NFO future and stores its volume-backed OHLCV/OI candles in a separate table. It does not create historical option premiums. Kite's continuous-history feature is for futures; do not treat it as an expired-options archive.
+
+
+Run one read-only analysis pass:
+
+```powershell
+tradinggpt-options analyze-options --underlyings NIFTY,BANKNIFTY --strikes-each-side 3 --risk-free-rate 0.065 --interval 5minute
+```
+
+The command fetches current spot and option quotes, resolves the nearest NFO futures contract for volume-backed VWAP candles, downloads its recent history,
+builds a quality-checked CE/PE chain view using spot for option moneyness/IV, and evaluates the explainable EMA9/EMA21,
+session-VWAP, RSI14 and volume baseline. It prints CE, PE or NO_TRADE with the
+selected contract and rationale. The risk-free rate is an explicit model assumption;
+it is not fetched or silently guessed. The score is heuristic, not a win probability.
+News, scheduled events and broad market regime are not yet integrated. This command
+does not submit an order.
+
+The collector refreshes its near-ATM option subscription window every five minutes, unsubscribing contracts that move out of range and resubscribing the new window after reconnects. It runs until stopped; Windows service/task scheduling remains future work.
 
 ## Run the API
 
@@ -64,37 +97,49 @@ Python 3.12 is the initial compatibility target. Validate any move to a newer Py
 uvicorn tradinggpt_options.api.main:app --reload
 ```
 
-Open `http://127.0.0.1:8000/health`.
+Open http://127.0.0.1:8000/docs.
 
-## Configuration
+- GET /health — application and paper/live-mode status
+- GET /api/v1/paper/account — persistent paper-account summary
+- GET /api/v1/paper/trades?status=all|open|closed — trade history
+- GET /api/v1/market/instruments?underlying=NIFTY — latest persisted option contracts
+- GET /api/v1/market/quotes?limit=100 — latest persisted quote per contract, including full depth
 
-Never commit `.env`, Zerodha API secrets, access tokens, or account credentials. `.env.example` contains placeholders only.
+There is no HTTP order-placement endpoint. The paper account is initialized by the CLI or local paper broker, not by a read-only API request.
 
-Paper trading must remain enabled. The application intentionally has no live-order endpoint in this initial scaffold.
+## Implemented foundations
 
-## Development stages
+- Defensive parser for Kite's daily NFO option instrument master
+- Read-only Kite REST adapter for instrument master and full quote snapshots
+- Quote endpoint pacing and full-quote 500-instrument batch validation
+- Full-depth WebSocket subscription helper (3,000 token guard) and lifecycle state callbacks
+- Validated option contract, quote and order-book data models
+- CE/PE strike pairing, nearest-expiry and ATM selection
+- European Black–Scholes Greeks, implied-volatility bisection solver, quality-aware CE/PE chain view and explainable EMA/VWAP/RSI/volume baseline analysis CLI
+- SQLite models/repository for instrument snapshots, quote snapshots, paper accounts and trades
+- Premium-risk lot sizing
+- Local long-option paper broker with depth-aware VWAP entries/exits, insufficient-depth rejection, effective-dated Zerodha/NSE charges and mandatory premium/daily-loss/concurrent-position risk limits
+- Bid-side mark-to-market equity, stale/missing quote rejection and duplicate-open-trade protection
+- Read-only paper account, trade-history, instrument-master and latest-quote API endpoints
+- GitHub Actions lint/test matrix for Python 3.12 and 3.13
 
-1. Contract and market-data infrastructure.
-2. Options-chain snapshots and data-quality controls.
-3. Greeks and implied-volatility calculations.
-4. Contract selection and explainable signals.
-5. Historical options backtesting with documented data provenance.
-6. Paper execution with realistic bid/ask and cost assumptions.
-7. Dashboard, audit journal and session reports.
-8. Forward validation and independent readiness review.
+## Known limitations
 
-## Data integrity requirements
+- Kite credentials have not yet been supplied or used to test the adapter against a real account.
+- Live quote ingestion is available through the foreground `collect-options` CLI; Windows service/task scheduling, automatic token generation and robust process supervision remain future work.
+- Quote snapshots preserve all available bid/ask depth levels; historical OHLCV candles have a separate validated adapter and idempotent storage. A quality-aware chain view calculates mid-price IV and European BSM Greeks; scheduled chain persistence, OI-change history and signal integration remain future work.
+- The current Zerodha/NSE options charge schedule is effective from 1 April 2026 and includes NSE IPFT and nearest-rupee STT rounding; it remains an estimate that must be reconciled against actual contract notes. Earlier effective-dated schedules, partial fills and physical settlement charges are not yet modelled. Paper fills require displayed depth for the full requested quantity; they do not simulate partial fills.
+- Kite historical candles are supported for available instrument tokens, but its continuous-history feature is for futures, not expired options. Historical CE/PE contract data must be independently sourced or captured before expiry and validated before backtesting expired-option strategies.
+- Greeks use European Black–Scholes assumptions; expiry calendar/time conventions and dividend/carry inputs require market-specific validation.
+- No profitable strategy, 75% win rate, or live-trading readiness is claimed.
+- Live order placement is not implemented.
 
-Every stored observation should retain:
-- exchange and instrument identifiers
-- trading date and exchange timestamp
-- contract expiry, strike and option type
-- source and retrieval timestamp
-- price/quantity fields and their availability
-- data-quality flags
+## Development documents
 
-Do not backfill missing option prices with underlying prices. Do not infer executable fills from LTP when bid/ask data is available. Clearly label OHLC-only simulations.
+- docs/CHARGES.md
 
-## Status
-
-This is the clean project foundation, not a completed trading system. Broker integration, historical option-data procurement, strategy validation and paper execution are intentionally not represented as finished.
+- docs/ARCHITECTURE.md
+- docs/DATA_CONTRACT.md
+- docs/KITE_DATA_INTEGRATION.md
+- docs/ONE_WEEK_MVP.md
+- docs/ROADMAP.md

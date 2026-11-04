@@ -42,3 +42,9 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[project.scripts]
+tradinggpt-options = "tradinggpt_options.cli:main"
+
+[tool.setuptools.package-data]
+tradinggpt_options = ["static/*.html"]
