@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from sqlalchemy import select
@@ -70,6 +71,28 @@ class MarketDataRepository:
                 best_ask=quote.best_ask,
                 bid_quantity=quote.bid[0].quantity if quote.bid else None,
                 ask_quantity=quote.ask[0].quantity if quote.ask else None,
+                bid_depth_json=json.dumps(
+                    [
+                        {
+                            "price": str(level.price),
+                            "quantity": level.quantity,
+                            "orders": level.orders,
+                        }
+                        for level in quote.bid
+                    ],
+                    separators=(",", ":"),
+                ),
+                ask_depth_json=json.dumps(
+                    [
+                        {
+                            "price": str(level.price),
+                            "quantity": level.quantity,
+                            "orders": level.orders,
+                        }
+                        for level in quote.ask
+                    ],
+                    separators=(",", ":"),
+                ),
                 volume=quote.volume,
                 open_interest=quote.open_interest,
                 source=quote.source,
