@@ -23,13 +23,15 @@ def test_zerodha_nse_option_buy_and_sell_charges_are_side_specific() -> None:
     assert buy.brokerage == Decimal("20.00")
     assert buy.exchange_transaction == Decimal("2.31")
     assert buy.sebi_turnover == Decimal("0.01")
-    assert buy.stt == Decimal("0.00")
+    assert buy.ipft == Decimal("0.00")
+    assert buy.stt == Decimal("0")
     assert buy.stamp_duty == Decimal("0.20")
     assert buy.gst == Decimal("4.02")
     assert buy.total == Decimal("26.54")
-    assert sell.stt == Decimal("10.23")
+    assert sell.ipft == Decimal("0.00")
+    assert sell.stt == Decimal("10")
     assert sell.stamp_duty == Decimal("0.00")
-    assert sell.total == Decimal("36.70")
+    assert sell.total == Decimal("36.47")
 
 
 def test_charge_schedule_rejects_dates_before_effective_version() -> None:
