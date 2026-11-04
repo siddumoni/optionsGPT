@@ -25,8 +25,8 @@ class PaperExecutionConfig:
     )
 
     def __post_init__(self) -> None:
-        if self.initial_capital <= 0:
-            raise ValueError("initial_capital must be positive")
+        if not self.initial_capital.is_finite() or self.initial_capital <= 0:
+            raise ValueError("initial_capital must be finite and positive")
         if self.max_quote_age_seconds <= 0:
             raise ValueError("max_quote_age_seconds must be positive")
         if self.charges_per_side is not None and (
@@ -49,8 +49,8 @@ class PaperBroker:
     """Local long-options paper broker. Has no connection to broker order APIs.
 
     Entry uses best ask; exit uses best bid. If depth is missing, stale or crossed,
-    execution is rejected. Fees are configurable placeholders until the versioned
-    statutory charge schedule is implemented and independently verified.
+    execution is rejected. By default, each side uses the effective-dated Zerodha/NSE
+    options charge schedule; a flat override is available only for controlled tests.
     """
 
     def __init__(
