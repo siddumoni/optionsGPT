@@ -71,7 +71,7 @@ def test_paper_buy_at_ask_and_sell_at_bid_updates_ledger() -> None:
     )
     assert exit_fill.status == "CLOSED"
     assert exit_fill.price == Decimal("104.90")
-    assert exit_fill.cash_balance == Decimal("100311.00")
+    assert exit_fill.cash_balance == Decimal("100312.00")
     trade = broker.trade_history()[0]
     assert trade.gross_pnl == Decimal("312.00")
     assert trade.net_pnl == Decimal("312.00")
@@ -137,7 +137,7 @@ def test_equity_marks_open_option_at_bid_and_requires_fresh_quote() -> None:
     assert broker.equity(
         {(contract.exchange, contract.tradingsymbol): current_quote},
         now=now + timedelta(minutes=1),
-    ) == Decimal("100000.00")
+    ) == Decimal("100318.50")
 
     stale_quote = quote(contract, now - timedelta(minutes=1), "105.00", "105.20")
     with pytest.raises(ValueError, match="stale"):
