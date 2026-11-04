@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     kite_api_key: str = ""
     kite_api_secret: str = ""
     kite_access_token: str = ""
+    kite_underlying_spot_instruments: str = ""
     log_level: str = "INFO"
 
     @field_validator("database_url")
