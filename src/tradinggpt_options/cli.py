@@ -603,8 +603,58 @@ def collect_options(
         print("Press Ctrl+C to stop collection.")
 
         next_report = time.monotonic()
+        next_subscription_refresh = time.monotonic() + 300
         while True:
             time.sleep(1)
+            monotonic_now = time.monotonic()
+            if monotonic_now >= next_subscription_refresh:
+                try:
+                    refresh_market_now = datetime.now(MARKET_TIMEZONE)
+                    refresh_snapshot = adapter.fetch_full_quotes(spot_instruments)
+                    if refresh_snapshot.missing_symbols:
+                        raise RuntimeError(
+                            "missing spot quotes during subscription refresh: "
+                            + ", ".join(refresh_snapshot.missing_symbols)
+                        )
+                    refresh_now = datetime.now(UTC)
+                    refresh_quotes = {
+                        (quote.exchange, quote.tradingsymbol): quote
+                        for quote in refresh_snapshot.quotes
+                    }
+                    refresh_spot_prices: dict[str, Decimal] = {}
+                    for underlying in underlyings:
+                        exchange, symbol = mappings[underlying]
+                        quote = refresh_quotes.get((exchange, symbol))
+                        if quote is None or quote.last_price is None or quote.last_price <= 0:
+                            raise RuntimeError(
+                                f"missing valid spot price for {underlying}"
+                            )
+                        observed_at = quote.exchange_timestamp or quote.received_at
+                        age_seconds = (refresh_now - observed_at).total_seconds()
+                        if age_seconds < -5 or age_seconds > 30:
+                            raise RuntimeError(
+                                f"spot quote for {underlying} is stale during refresh"
+                            )
+                        refresh_spot_prices[underlying] = quote.last_price
+                    refresh_selection_date = _option_selection_date(refresh_market_now)
+                    refreshed_contracts = select_near_atm_contracts(
+                        contracts,
+                        spot_prices=refresh_spot_prices,
+                        as_of=refresh_selection_date,
+                        strikes_each_side=strikes_each_side,
+                    )
+                    if not refreshed_contracts:
+                        raise RuntimeError("subscription refresh selected no contracts")
+                    tokens = collector.update_contracts(refreshed_contracts)
+                    selected = refreshed_contracts
+                    print(
+                        f"[{refresh_market_now:%H:%M:%S}] subscription window refreshed: "
+                        f"{len(selected)} contracts / {len(tokens)} tokens"
+                    )
+                    next_subscription_refresh = time.monotonic() + 300
+                except Exception as exc:
+                    print(f"WARNING: subscription refresh failed; keeping prior window: {exc}")
+                    next_subscription_refresh = time.monotonic() + 60
             if time.monotonic() >= next_report:
                 status = collector.status()
                 last_tick = (
