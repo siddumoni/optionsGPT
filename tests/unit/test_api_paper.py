@@ -19,6 +19,9 @@ def test_paper_account_and_trade_read_endpoints(tmp_path) -> None:
     settings = Settings(database_url=database_url)
     app = create_app(settings)
     with TestClient(app) as client:
+        dashboard = client.get("/dashboard")
+        assert dashboard.status_code == 200
+        assert "PAPER ONLY" in dashboard.text
         response = client.get("/api/v1/paper/account")
         assert response.status_code == 404
         assert client.get("/api/v1/paper/trades").json() == []
