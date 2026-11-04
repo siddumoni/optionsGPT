@@ -267,7 +267,6 @@ class PaperBroker:
                 f"maximum approved lots: {sizing.lots}"
             )
 
-
         trade_id = str(uuid4())
         account.cash_balance -= total_debit
         self.session.add(
