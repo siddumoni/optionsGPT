@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 
 from tradinggpt_options import __version__
@@ -40,6 +42,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
         lifespan=lifespan,
     )
+
+    @application.get("/dashboard", include_in_schema=False)
+    def dashboard() -> FileResponse:
+        dashboard_path = (
+            Path(__file__).resolve().parents[3] / "web" / "dashboard.html"
+        )
+        if not dashboard_path.is_file():
+            raise HTTPException(status_code=404, detail="dashboard asset not found")
+        return FileResponse(dashboard_path)
 
     @application.get("/health", tags=["system"])
     def health() -> dict[str, str | bool]:
