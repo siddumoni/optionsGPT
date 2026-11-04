@@ -1,0 +1,43 @@
+from datetime import date
+from decimal import Decimal
+
+from tradinggpt_options.data.models import OptionContract
+from tradinggpt_options.options.chain import build_strike_pairs, select_atm_strike, select_nearest_expiry
+
+
+def contract(symbol: str, typ: str, strike: str, expiry: date = date(2026, 11, 26)) -> OptionContract:
+    return OptionContract(
+        exchange="NFO",
+        tradingsymbol=symbol,
+        instrument_token=1 if typ == "CE" else 2,
+        underlying="NIFTY",
+        expiry=expiry,
+        strike=Decimal(strike),
+        option_type=typ,  # type: ignore[arg-type]
+        lot_size=65,
+        tick_size=Decimal("0.05"),
+    )
+
+
+def test_builds_call_put_pairs_and_selects_atm() -> None:
+    contracts = [
+        contract("NIFTY25000CE", "CE", "25000"),
+        contract("NIFTY25000PE", "PE", "25000"),
+        contract("NIFTY25100CE", "CE", "25100"),
+    ]
+    pairs = build_strike_pairs(contracts)
+    atm = select_atm_strike(
+        pairs, underlying="NIFTY", expiry=date(2026, 11, 26),
+        underlying_price=Decimal("25020")
+    )
+    assert atm is not None
+    assert atm.strike == Decimal("25000")
+    assert atm.call is not None and atm.put is not None
+
+
+def test_selects_next_expiry_not_expired_contract() -> None:
+    contracts = [
+        contract("OLD", "CE", "25000", date(2026, 10, 29)),
+        contract("NEW", "PE", "25000", date(2026, 11, 26)),
+    ]
+    assert select_nearest_expiry(contracts, as_of=date(2026, 11, 4)) == date(2026, 11, 26)
