@@ -210,6 +210,17 @@ class PaperBroker:
         quantity = lots * contract.lot_size
         ask = self._depth_fill_price(quote.ask, quantity)
         account = self._account()
+        notional = (ask * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        entry_charge, entry_charges_json = self._calculate_charges(
+            premium=ask,
+            quantity=quantity,
+            side="BUY",
+            at=observed_now,
+        )
+        total_debit = notional + entry_charge
+        if account.cash_balance < total_debit:
+            raise ValueError("insufficient paper cash for premium debit and charges")
+
         limits = self.config.risk_limits
         if limits is None:
             raise ValueError("risk limits must be configured before opening paper positions")
@@ -229,16 +240,6 @@ class PaperBroker:
                 f"requested {lots} lots exceeds configured risk limits; "
                 f"maximum approved lots: {sizing.lots}"
             )
-        notional = (ask * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        entry_charge, entry_charges_json = self._calculate_charges(
-            premium=ask,
-            quantity=quantity,
-            side="BUY",
-            at=observed_now,
-        )
-        total_debit = notional + entry_charge
-        if account.cash_balance < total_debit:
-            raise ValueError("insufficient paper cash for premium debit and charges")
 
         open_trade = self.session.scalar(
             select(PaperTrade).where(
