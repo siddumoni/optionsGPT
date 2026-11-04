@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -118,6 +119,12 @@ def test_collector_archives_master_and_persists_websocket_ticks() -> None:
         assert quote.best_ask == Decimal("100.3")
         assert quote.volume == 1200
         assert quote.open_interest == 5500
+        assert json.loads(quote.bid_depth_json) == [
+            {"price": "100.2", "quantity": 65, "orders": 1}
+        ]
+        assert json.loads(quote.ask_depth_json) == [
+            {"price": "100.3", "quantity": 65, "orders": 1}
+        ]
 
     collector.stop()
     assert ticker.closed
