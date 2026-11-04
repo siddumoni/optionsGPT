@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from math import isfinite
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
+from math import isfinite
 from zoneinfo import ZoneInfo
 
 from tradinggpt_options.data.models import (
