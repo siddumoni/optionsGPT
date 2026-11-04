@@ -227,6 +227,17 @@ class PaperBroker:
         if account.cash_balance < total_debit:
             raise ValueError("insufficient paper cash for premium debit and charges")
 
+        open_trade = self.session.scalar(
+            select(PaperTrade).where(
+                PaperTrade.account_id == self.account_id,
+                PaperTrade.exchange == contract.exchange,
+                PaperTrade.tradingsymbol == contract.tradingsymbol,
+                PaperTrade.status == "OPEN",
+            )
+        )
+        if open_trade is not None:
+            raise ValueError("an open paper position already exists for this contract")
+
         limits = self.config.risk_limits
         if limits is None:
             raise ValueError("risk limits must be configured before opening paper positions")
@@ -256,16 +267,6 @@ class PaperBroker:
                 f"maximum approved lots: {sizing.lots}"
             )
 
-        open_trade = self.session.scalar(
-            select(PaperTrade).where(
-                PaperTrade.account_id == self.account_id,
-                PaperTrade.exchange == contract.exchange,
-                PaperTrade.tradingsymbol == contract.tradingsymbol,
-                PaperTrade.status == "OPEN",
-            )
-        )
-        if open_trade is not None:
-            raise ValueError("an open paper position already exists for this contract")
 
         trade_id = str(uuid4())
         account.cash_balance -= total_debit
