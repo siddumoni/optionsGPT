@@ -9,11 +9,11 @@ from zoneinfo import ZoneInfo
 
 from tradinggpt_options.config.settings import Settings, get_settings
 from tradinggpt_options.data.collector import KiteOptionsCollector
+from tradinggpt_options.data.instrument_master import parse_kite_futures_instruments
 from tradinggpt_options.data.kite_adapter import (
     KiteMarketDataAdapter,
     create_kite_ticker,
 )
-from tradinggpt_options.data.instrument_master import parse_kite_futures_instruments
 from tradinggpt_options.data.models import assess_quote_quality
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
 from tradinggpt_options.options.chain import (
