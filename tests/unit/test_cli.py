@@ -1,11 +1,17 @@
+import sys
+from types import SimpleNamespace
+
 import pytest
 
 from tradinggpt_options.cli import (
+    exchange_kite_request_token,
+    print_kite_login_url,
     _completed_intraday_candles,
     _option_selection_date,
     _parse_aware_datetime,
     _parse_spot_instrument_mappings,
 )
+from tradinggpt_options.config.settings import Settings
 
 
 def test_parses_explicit_index_and_equity_spot_mappings() -> None:
@@ -95,3 +101,40 @@ def test_analysis_uses_only_completed_intraday_candles() -> None:
         interval_seconds=300,
     )
     assert result == (completed,)
+
+
+def test_kite_auth_cli_prints_login_url_and_daily_access_token(
+    monkeypatch,
+    capsys,
+) -> None:
+    class FakeKiteConnect:
+        def __init__(self, *, api_key: str) -> None:
+            assert api_key == "test-api-key"
+
+        def login_url(self) -> str:
+            return "https://kite.test/login"
+
+        def generate_session(self, request_token: str, *, api_secret: str) -> dict:
+            assert request_token == "short-lived-request-token"
+            assert api_secret == "test-api-secret"
+            return {"access_token": "daily-access-token"}
+
+    monkeypatch.setitem(
+        sys.modules,
+        "kiteconnect",
+        SimpleNamespace(KiteConnect=FakeKiteConnect),
+    )
+    settings = Settings(
+        kite_api_key="test-api-key",
+        kite_api_secret="test-api-secret",
+    )
+    print_kite_login_url(settings)
+    assert "https://kite.test/login" in capsys.readouterr().out
+
+    exchange_kite_request_token(
+        settings,
+        request_token="short-lived-request-token",
+    )
+    output = capsys.readouterr().out
+    assert "daily-access-token" in output
+    assert "Do not commit .env" in output
