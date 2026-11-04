@@ -78,3 +78,28 @@ def test_parses_kite_websocket_tick_field_names() -> None:
     assert quote.open_interest == 50000
     assert quote.best_bid == Decimal("100.2")
     assert quote.best_ask == Decimal("100.3")
+
+
+def test_depth_levels_are_sorted_and_zero_quantity_placeholders_are_ignored() -> None:
+    quote = parse_kite_quote(
+        exchange="NFO",
+        tradingsymbol="NIFTY26NOV25000CE",
+        instrument_token=123,
+        payload={
+            "depth": {
+                "buy": [
+                    {"price": 99.8, "quantity": 10, "orders": 1},
+                    {"price": 100.0, "quantity": 20, "orders": 2},
+                    {"price": 100.1, "quantity": 0, "orders": 0},
+                ],
+                "sell": [
+                    {"price": 100.4, "quantity": 10, "orders": 1},
+                    {"price": 100.2, "quantity": 20, "orders": 2},
+                ],
+            }
+        },
+    )
+    assert quote.best_bid == Decimal("100.0")
+    assert quote.best_ask == Decimal("100.2")
+    assert len(quote.bid) == 2
+    assert len(quote.ask) == 2
