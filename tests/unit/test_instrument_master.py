@@ -1,7 +1,5 @@
 from tradinggpt_options.data.instrument_master import parse_kite_instruments
 
-
-
 HEADER = (
     "instrument_token,exchange_token,tradingsymbol,name,last_price,"
     "expiry,strike,tick_size,lot_size,instrument_type,segment,exchange\n"
