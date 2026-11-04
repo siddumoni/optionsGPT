@@ -47,28 +47,45 @@ class MarketDataRepository:
         self.session.commit()
         return saved
 
+    def save_quotes(
+        self,
+        quotes: tuple[OptionQuote, ...],
+        *,
+        quality_flags: tuple[tuple[str, ...], ...] | None = None,
+    ) -> int:
+        if not quotes:
+            return 0
+        flags = quality_flags or tuple(() for _ in quotes)
+        if len(flags) != len(quotes):
+            raise ValueError("quality_flags must have the same length as quotes")
+        rows = [
+            QuoteSnapshot(
+                exchange=quote.exchange,
+                tradingsymbol=quote.tradingsymbol,
+                instrument_token=quote.instrument_token,
+                exchange_timestamp=quote.exchange_timestamp,
+                received_at=quote.received_at,
+                last_price=quote.last_price,
+                best_bid=quote.best_bid,
+                best_ask=quote.best_ask,
+                bid_quantity=quote.bid[0].quantity if quote.bid else None,
+                ask_quantity=quote.ask[0].quantity if quote.ask else None,
+                volume=quote.volume,
+                open_interest=quote.open_interest,
+                source=quote.source,
+                quality_flags=";".join(flags[index]),
+            )
+            for index, quote in enumerate(quotes)
+        ]
+        self.session.add_all(rows)
+        self.session.commit()
+        return len(rows)
+
     def save_quote(
         self,
         quote: OptionQuote,
         *,
         quality_flags: tuple[str, ...] = (),
     ) -> int:
-        row = QuoteSnapshot(
-            exchange=quote.exchange,
-            tradingsymbol=quote.tradingsymbol,
-            instrument_token=quote.instrument_token,
-            exchange_timestamp=quote.exchange_timestamp,
-            received_at=quote.received_at,
-            last_price=quote.last_price,
-            best_bid=quote.best_bid,
-            best_ask=quote.best_ask,
-            bid_quantity=quote.bid[0].quantity if quote.bid else None,
-            ask_quantity=quote.ask[0].quantity if quote.ask else None,
-            volume=quote.volume,
-            open_interest=quote.open_interest,
-            source=quote.source,
-            quality_flags=";".join(quality_flags),
-        )
-        self.session.add(row)
-        self.session.commit()
-        return row.id
+        self.save_quotes((quote,), quality_flags=(quality_flags,))
+        return 1
