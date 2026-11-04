@@ -122,3 +122,26 @@ def test_paper_rejects_insufficient_cash_and_bad_lots() -> None:
             lots=0,
             now=now,
         )
+
+
+def test_equity_marks_open_option_at_bid_and_requires_fresh_quote() -> None:
+    broker, contract, now = setup_broker()
+    entry_quote = quote(contract, now, "99.90", "100.10")
+    fill = broker.buy_to_open(
+        contract=contract,
+        quote=entry_quote,
+        lots=1,
+        now=now,
+    )
+    current_quote = quote(contract, now + timedelta(minutes=1), "105.00", "105.20")
+    assert broker.equity(
+        {(contract.exchange, contract.tradingsymbol): current_quote},
+        now=now + timedelta(minutes=1),
+    ) == Decimal("100000.00")
+
+    stale_quote = quote(contract, now - timedelta(minutes=1), "105.00", "105.20")
+    with pytest.raises(ValueError, match="stale"):
+        broker.equity(
+            {(contract.exchange, contract.tradingsymbol): stale_quote},
+            now=now + timedelta(minutes=1),
+        )
