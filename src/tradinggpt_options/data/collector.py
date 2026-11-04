@@ -157,6 +157,48 @@ class KiteOptionsCollector:
             raise
         return self._selected_tokens
 
+    def update_contracts(
+        self,
+        contracts: Iterable[OptionContract],
+    ) -> tuple[int, ...]:
+        """Move the live subscription window without restarting the socket."""
+        selected = tuple(contracts)
+        if not selected:
+            raise ValueError("at least one option contract must remain selected")
+        if len(selected) > 3000:
+            raise ValueError("select no more than 3,000 contracts per Kite connection")
+
+        with self._lock:
+            if self._session is None:
+                raise RuntimeError("collector must be started before updating contracts")
+            tokens: list[int] = []
+            for contract in selected:
+                master_contract = self._contracts_by_token.get(contract.instrument_token)
+                if master_contract != contract:
+                    raise ValueError(
+                        f"contract {contract.tradingsymbol} is not in the loaded daily master"
+                    )
+                tokens.append(contract.instrument_token)
+            new_tokens = tuple(dict.fromkeys(tokens))
+            old_tokens = self._selected_tokens
+            self._selected_tokens = new_tokens
+            session = self._session
+
+        if session.is_connected:
+            removed = tuple(token for token in old_tokens if token not in new_tokens)
+            added = tuple(token for token in new_tokens if token not in old_tokens)
+            try:
+                if removed:
+                    session.unsubscribe(removed)
+                if added:
+                    session.subscribe(added)
+            except Exception as exc:
+                with self._lock:
+                    self._state = "error"
+                    self._last_error = str(exc)
+                raise
+        return new_tokens
+
     def _handle_state(self, state: str, detail: str | None) -> None:
         with self._lock:
             self._state = state
