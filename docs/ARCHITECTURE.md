@@ -39,3 +39,14 @@ Kite packet. Historical OHLCV candles are stored in a separate table and cannot
 be substituted for quote-level execution prices. Backtest fills must state
 whether they are derived from candle OHLC, actual historical quotes or a
 synthetic assumption.
+
+
+## ADR-008: Use NFO futures volume as the VWAP candle source
+
+NSE cash index spot candles do not provide a reliable traded-volume series for
+VWAP. The one-pass analysis workflow therefore uses the nearest non-expired NFO
+future for volume-backed OHLCV/ VWAP and uses the configured NSE spot instrument
+for option moneyness, ATM selection and IV/Greeks calculations. The future is
+resolved dynamically from the same daily NFO instrument master; it is not
+hard-coded to a monthly symbol. Stock underlyings use the same futures proxy in
+this baseline so the signal source is consistent across the options universe.
