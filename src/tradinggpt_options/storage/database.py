@@ -24,6 +24,13 @@ def build_engine(database_url: str) -> Engine:
     return create_engine(database_url, future=True, pool_pre_ping=True)
 
 
+def create_schema(engine: Engine) -> None:
+    # Import models here so SQLAlchemy has registered every table.
+    from tradinggpt_options.storage import tables  # noqa: F401
+
+    Base.metadata.create_all(engine)
+
+
 def build_session_factory(engine: Engine) -> sessionmaker:
     return sessionmaker(
         bind=engine,
