@@ -294,6 +294,15 @@ def test_paper_broker_rejects_position_over_risk_and_concurrent_limits() -> None
             now=now,
         )
 
+    broker, contract, now = setup_broker(max_daily_loss=Decimal("5000"))
+    with pytest.raises(ValueError, match="one lot exceeds"):
+        broker.buy_to_open(
+            contract=contract,
+            quote=quote(contract, now, "99.9", "100.1"),
+            lots=1,
+            now=now,
+        )
+
     broker, contract, now = setup_broker(max_concurrent_positions=1)
     first = broker.buy_to_open(
         contract=contract,
