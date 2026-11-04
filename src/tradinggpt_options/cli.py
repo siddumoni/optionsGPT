@@ -19,6 +19,7 @@ from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutio
 from tradinggpt_options.options.chain import (
     select_near_atm_contracts,
     select_nearest_expiry,
+    select_nearest_future_contract,
 )
 from tradinggpt_options.options.chain_analytics import build_option_chain_view
 from tradinggpt_options.research.baseline import analyze_baseline
@@ -322,27 +323,17 @@ def analyze_options(
                 snapshot_at=now,
                 risk_free_rate=risk_free_rate,
             )
-            underlying_futures = [
-                future
-                for future in futures
-                if future.underlying == underlying
-                and future.expiry >= selection_date
-            ]
-            if not underlying_futures:
+            future_contract = select_nearest_future_contract(
+                futures,
+                underlying=underlying,
+                as_of=selection_date,
+            )
+            if future_contract is None:
                 print(
                     f"{underlying}: NO_TRADE — no current NFO future available "
                     "for volume-backed VWAP analysis"
                 )
                 continue
-            future_expiry = min(future.expiry for future in underlying_futures)
-            future_contract = min(
-                (
-                    future
-                    for future in underlying_futures
-                    if future.expiry == future_expiry
-                ),
-                key=lambda future: future.tradingsymbol,
-            )
             candles = adapter.fetch_historical_candles(
                 exchange=future_contract.exchange,
                 tradingsymbol=future_contract.tradingsymbol,
