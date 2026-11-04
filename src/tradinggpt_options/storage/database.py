@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -29,6 +29,28 @@ def create_schema(engine: Engine) -> None:
     from tradinggpt_options.storage import tables  # noqa: F401
 
     Base.metadata.create_all(engine)
+    # create_all does not evolve existing tables. Keep local SQLite databases
+    # created by earlier versions compatible with the quote-depth schema.
+    if engine.dialect.name == "sqlite":
+        columns = {
+            column["name"]
+            for column in inspect(engine).get_columns("quote_snapshots")
+        }
+        with engine.begin() as connection:
+            if "bid_depth_json" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE quote_snapshots "
+                        "ADD COLUMN bid_depth_json TEXT NOT NULL DEFAULT '[]'"
+                    )
+                )
+            if "ask_depth_json" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE quote_snapshots "
+                        "ADD COLUMN ask_depth_json TEXT NOT NULL DEFAULT '[]'"
+                    )
+                )
 
 
 def build_session_factory(engine: Engine) -> sessionmaker:
