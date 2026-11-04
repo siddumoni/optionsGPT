@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -46,6 +47,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def decimal_string(value: Decimal) -> str:
         return format(value, "f")
+
+    def datetime_string(value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        # SQLite drops tzinfo for DateTime columns; all application writes are UTC.
+        normalized = (
+            value.replace(tzinfo=UTC)
+            if value.tzinfo is None
+            else value.astimezone(UTC)
+        )
+        return normalized.isoformat()
 
     @application.get("/api/v1/paper/account", tags=["paper"])
     def paper_account() -> dict[str, Any]:
@@ -131,10 +143,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         decimal_string(trade.exit_premium)
                         if trade.exit_premium is not None else None
                     ),
-                    "entry_at": trade.entry_at.isoformat(),
-                    "exit_at": (
-                        trade.exit_at.isoformat() if trade.exit_at else None
-                    ),
+                    "entry_at": datetime_string(trade.entry_at),
+                    "exit_at": datetime_string(trade.exit_at),
                     "status": trade.status,
                     "gross_pnl": decimal_string(trade.gross_pnl),
                     "charges": decimal_string(trade.charges),
