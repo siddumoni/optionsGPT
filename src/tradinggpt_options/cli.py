@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import UTC, datetime, time as datetime_time, timedelta
+from datetime import UTC, datetime, timedelta
+from datetime import time as datetime_time
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
