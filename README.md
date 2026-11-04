@@ -54,7 +54,7 @@ KITE_ACCESS_TOKEN=your_daily_access_token
 KITE_UNDERLYING_SPOT_INSTRUMENTS=NIFTY=NSE:NIFTY 50;BANKNIFTY=NSE:NIFTY BANK
 ```
 
-Add one mapping per underlying. For stock options, the mapping usually uses the NSE cash symbol, for example `RELIANCE=NSE:RELIANCE`. The underlying name must match the `name` field in Kite's NFO instrument master. Confirm the exact symbol and exchange in your Kite instrument master before use.
+Add one mapping per underlying. For stock options, the mapping usually uses the NSE cash symbol, for example `RELIANCE=NSE:RELIANCE`. For stock options, the underlying name must match the `name` field in Kite's NFO instrument master. Index underlyings with a blank name are resolved from known NFO symbol prefixes. Confirm exact spot symbols and exchanges in your Kite instrument master before use.
 
 Start collection:
 
@@ -112,7 +112,7 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 
 - Kite credentials have not yet been supplied or used to test the adapter against a real account.
 - Live quote ingestion is available through the foreground `collect-options` CLI; Windows service/task scheduling, automatic token generation and robust process supervision remain future work.
-- Quote snapshots preserve all available bid/ask depth levels; historical OHLCV candles have a separate validated adapter and idempotent storage. Scheduled chain aggregation, OI history and derived chain analytics remain future work.
+- Quote snapshots preserve all available bid/ask depth levels; historical OHLCV candles have a separate validated adapter and idempotent storage. A quality-aware chain view calculates mid-price IV and European BSM Greeks; scheduled chain persistence, OI-change history and signal integration remain future work.
 - The current Zerodha/NSE options charge schedule is effective from 1 April 2026 and is an estimate; reconcile against actual contract notes. Earlier effective-dated schedules, partial fills and physical settlement charges are not yet modelled. Paper fills require displayed depth for the full requested quantity; they do not simulate partial fills.
 - Kite historical candles are supported for available instrument tokens, but its continuous-history feature is for futures, not expired options. Historical CE/PE contract data must be independently sourced or captured before expiry and validated before backtesting expired-option strategies.
 - Greeks use European Black–Scholes assumptions; expiry calendar/time conventions and dividend/carry inputs require market-specific validation.
