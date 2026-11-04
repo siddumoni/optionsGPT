@@ -28,10 +28,6 @@ class KiteTickerClient(Protocol):
 
     def set_mode(self, mode: str, instrument_tokens: list[int]) -> None: ...
 
-    def connect(self, threaded: bool = False) -> None: ...
-
-    def close(self) -> None: ...
-
 
 @dataclass(frozen=True, slots=True)
 class ReadOnlyMarketSnapshot:
@@ -43,8 +39,13 @@ class ReadOnlyMarketSnapshot:
 class RequestPacer:
     """Thread-safe minimum interval between calls to one REST endpoint."""
 
-    def __init__(self, *, interval_seconds: float, clock: Callable[[], float] = time.monotonic,
-                 sleeper: Callable[[float], None] = time.sleep) -> None:
+    def __init__(
+        self,
+        *,
+        interval_seconds: float,
+        clock: Callable[[], float] = time.monotonic,
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> None:
         if interval_seconds < 0:
             raise ValueError("interval_seconds cannot be negative")
         self._interval = interval_seconds
@@ -163,3 +164,69 @@ def subscribe_full_market_data(
         ticker.subscribe(list(tokens))
         ticker.set_mode(ticker.MODE_FULL, list(tokens))
     return tokens
+
+
+class KiteWebSocketSession:
+    """Lifecycle wrapper for a single official KiteTicker connection."""
+
+    def __init__(
+        self,
+        ticker: Any,
+        *,
+        on_ticks: Callable[[list[dict[str, Any]]], None],
+        on_state: Callable[[str, str | None], None] | None = None,
+    ) -> None:
+        self._ticker = ticker
+        self._on_ticks = on_ticks
+        self._on_state = on_state or (lambda _state, _detail: None)
+        self._connected = threading.Event()
+        self._last_tick_at: datetime | None = None
+
+        ticker.on_ticks = self._handle_ticks
+        ticker.on_connect = self._handle_connect
+        ticker.on_close = self._handle_close
+        ticker.on_error = self._handle_error
+        ticker.on_reconnect = self._handle_reconnect
+        ticker.on_noreconnect = self._handle_no_reconnect
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected.is_set()
+
+    @property
+    def last_tick_at(self) -> datetime | None:
+        return self._last_tick_at
+
+    def _handle_ticks(self, _ws: Any, ticks: list[dict[str, Any]]) -> None:
+        self._last_tick_at = datetime.now(UTC)
+        self._on_ticks(ticks)
+
+    def _handle_connect(self, _ws: Any, _response: Any) -> None:
+        self._connected.set()
+        self._on_state("connected", None)
+
+    def _handle_close(self, _ws: Any, code: Any, reason: Any) -> None:
+        self._connected.clear()
+        self._on_state("disconnected", f"{code}: {reason}")
+
+    def _handle_error(self, _ws: Any, code: Any, reason: Any) -> None:
+        self._on_state("error", f"{code}: {reason}")
+
+    def _handle_reconnect(self, _ws: Any, attempt: Any) -> None:
+        self._connected.clear()
+        self._on_state("reconnecting", str(attempt))
+
+    def _handle_no_reconnect(self, _ws: Any) -> None:
+        self._connected.clear()
+        self._on_state("reconnect_exhausted", None)
+
+    def connect(self, *, threaded: bool = True) -> None:
+        self._ticker.connect(threaded=threaded)
+
+    def subscribe(self, instrument_tokens: Iterable[int]) -> tuple[int, ...]:
+        return subscribe_full_market_data(self._ticker, instrument_tokens)
+
+    def close(self) -> None:
+        self._connected.clear()
+        self._ticker.close()
+        self._on_state("stopped", None)
