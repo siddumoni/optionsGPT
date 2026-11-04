@@ -6,8 +6,8 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tradinggpt_options.data.models import OptionContract, OptionQuote
-from tradinggpt_options.storage.tables import InstrumentSnapshot, QuoteSnapshot
+from tradinggpt_options.data.models import MarketCandle, OptionContract, OptionQuote
+from tradinggpt_options.storage.tables import CandleSnapshot, InstrumentSnapshot, QuoteSnapshot
 
 
 class MarketDataRepository:
@@ -112,3 +112,37 @@ class MarketDataRepository:
     ) -> int:
         self.save_quotes((quote,), quality_flags=(quality_flags,))
         return 1
+
+
+    def save_candles(self, candles: tuple[MarketCandle, ...]) -> int:
+        """Idempotently persist candles by exchange, symbol, interval and timestamp."""
+        saved = 0
+        for candle in candles:
+            existing = self.session.scalar(
+                select(CandleSnapshot).where(
+                    CandleSnapshot.exchange == candle.exchange,
+                    CandleSnapshot.tradingsymbol == candle.tradingsymbol,
+                    CandleSnapshot.interval == candle.interval,
+                    CandleSnapshot.timestamp == candle.timestamp,
+                )
+            )
+            if existing is not None:
+                continue
+            self.session.add(
+                CandleSnapshot(
+                    exchange=candle.exchange,
+                    tradingsymbol=candle.tradingsymbol,
+                    instrument_token=candle.instrument_token,
+                    interval=candle.interval,
+                    timestamp=candle.timestamp,
+                    open=candle.open,
+                    high=candle.high,
+                    low=candle.low,
+                    close=candle.close,
+                    volume=candle.volume,
+                    open_interest=candle.open_interest,
+                )
+            )
+            saved += 1
+        self.session.commit()
+        return saved
