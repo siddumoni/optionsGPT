@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Iterable
 
 from tradinggpt_options.data.models import OptionContract, OptionQuote
 
@@ -21,7 +21,8 @@ class StrikePair:
 def build_strike_pairs(contracts: Iterable[OptionContract]) -> tuple[StrikePair, ...]:
     grouped: dict[tuple[str, date, Decimal], dict[str, OptionContract]] = defaultdict(dict)
     for contract in contracts:
-        grouped[(contract.underlying, contract.expiry, contract.strike)][contract.option_type] = contract
+        key = (contract.underlying, contract.expiry, contract.strike)
+        grouped[key][contract.option_type] = contract
     pairs = [
         StrikePair(
             underlying=key[0],
@@ -43,7 +44,11 @@ class ChainRow:
     quote: OptionQuote | None
 
 
-def select_nearest_expiry(contracts: Iterable[OptionContract], *, as_of: date) -> date | None:
+def select_nearest_expiry(
+    contracts: Iterable[OptionContract],
+    *,
+    as_of: date,
+) -> date | None:
     expiries = sorted({item.expiry for item in contracts if item.expiry >= as_of})
     return expiries[0] if expiries else None
 
