@@ -182,3 +182,77 @@ def test_paper_broker_applies_versioned_zerodha_option_charges() -> None:
     exit_breakdown = json.loads(trade.exit_charges_json)
     assert exit_breakdown["stt"] == "10.23"
     assert exit_breakdown["stamp_duty"] == "0.00"
+
+
+def test_paper_fills_consume_multiple_depth_levels_at_vwap() -> None:
+    broker, contract, now = setup_broker()
+    entry_quote = OptionQuote(
+        exchange="NFO",
+        tradingsymbol=contract.tradingsymbol,
+        instrument_token=contract.instrument_token,
+        exchange_timestamp=now,
+        received_at=now,
+        last_price=Decimal("100.2"),
+        bid=(DepthLevel(Decimal("99.9"), 100),),
+        ask=(
+            DepthLevel(Decimal("100.1"), 20),
+            DepthLevel(Decimal("100.2"), 45),
+        ),
+        volume=1000,
+        open_interest=20000,
+    )
+    entry = broker.buy_to_open(
+        contract=contract,
+        quote=entry_quote,
+        lots=1,
+        now=now,
+    )
+    assert entry.price == Decimal("100.1692")
+    assert entry.cash_balance == Decimal("93489.00")
+
+    exit_quote = OptionQuote(
+        exchange="NFO",
+        tradingsymbol=contract.tradingsymbol,
+        instrument_token=contract.instrument_token,
+        exchange_timestamp=now + timedelta(minutes=1),
+        received_at=now + timedelta(minutes=1),
+        last_price=Decimal("99.8"),
+        bid=(
+            DepthLevel(Decimal("99.9"), 20),
+            DepthLevel(Decimal("99.8"), 45),
+        ),
+        ask=(DepthLevel(Decimal("100.0"), 100),),
+        volume=1100,
+        open_interest=20000,
+    )
+    exit_fill = broker.sell_to_close(
+        trade_id=entry.trade_id,
+        quote=exit_quote,
+        now=now + timedelta(minutes=1),
+    )
+    assert exit_fill.price == Decimal("99.8308")
+    assert exit_fill.cash_balance == Decimal("99978.00")
+    assert broker.trade_history()[0].gross_pnl == Decimal("-22.00")
+
+
+def test_paper_broker_rejects_depth_insufficient_for_full_lot() -> None:
+    broker, contract, now = setup_broker()
+    shallow_quote = OptionQuote(
+        exchange="NFO",
+        tradingsymbol=contract.tradingsymbol,
+        instrument_token=contract.instrument_token,
+        exchange_timestamp=now,
+        received_at=now,
+        last_price=Decimal("100"),
+        bid=(DepthLevel(Decimal("99.9"), 20),),
+        ask=(DepthLevel(Decimal("100.1"), 20),),
+        volume=100,
+        open_interest=1000,
+    )
+    with pytest.raises(ValueError, match="insufficient displayed depth"):
+        broker.buy_to_open(
+            contract=contract,
+            quote=shallow_quote,
+            lots=1,
+            now=now,
+        )
