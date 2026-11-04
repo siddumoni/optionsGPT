@@ -1,6 +1,11 @@
+from datetime import UTC, datetime
+
 import pytest
 
-from tradinggpt_options.cli import _parse_spot_instrument_mappings
+from tradinggpt_options.cli import (
+    _parse_aware_datetime,
+    _parse_spot_instrument_mappings,
+)
 
 
 def test_parses_explicit_index_and_equity_spot_mappings() -> None:
@@ -27,3 +32,18 @@ def test_parses_explicit_index_and_equity_spot_mappings() -> None:
 def test_rejects_invalid_spot_instrument_mappings(raw: str) -> None:
     with pytest.raises(ValueError):
         _parse_spot_instrument_mappings(raw)
+
+
+def test_parses_timezone_aware_cli_datetime() -> None:
+    value = _parse_aware_datetime("2026-11-04T09:15:00+05:30")
+    assert value == datetime(2026, 11, 4, 9, 15, tzinfo=UTC).replace(
+        tzinfo=UTC
+    ).astimezone(value.tzinfo)
+
+
+@pytest.mark.parametrize("raw", ["2026-11-04T09:15:00", "not-a-date"])
+def test_rejects_cli_datetime_without_valid_timezone(raw: str) -> None:
+    from argparse import ArgumentTypeError
+
+    with pytest.raises(ArgumentTypeError):
+        _parse_aware_datetime(raw)
