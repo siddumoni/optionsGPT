@@ -52,6 +52,26 @@ def create_schema(engine: Engine) -> None:
                     )
                 )
 
+        trade_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns("paper_trades")
+        }
+        with engine.begin() as connection:
+            if "entry_charges_json" not in trade_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE paper_trades "
+                        "ADD COLUMN entry_charges_json TEXT NOT NULL DEFAULT '{}'"
+                    )
+                )
+            if "exit_charges_json" not in trade_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE paper_trades "
+                        "ADD COLUMN exit_charges_json TEXT NOT NULL DEFAULT '{}'"
+                    )
+                )
+
 
 def build_session_factory(engine: Engine) -> sessionmaker:
     return sessionmaker(
