@@ -23,6 +23,7 @@ from tradinggpt_options.storage.tables import (
     PaperAccount,
     PaperTrade,
     QuoteSnapshot,
+    StrategyDecisionSnapshot,
 )
 
 
