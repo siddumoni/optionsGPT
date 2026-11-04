@@ -144,3 +144,37 @@ def assess_quote_quality(quote: OptionQuote, *, now: datetime, max_age_seconds: 
     if missing_ask:
         warnings.append("missing or invalid best ask")
     return DataQuality(stale, crossed, missing_bid, missing_ask, tuple(warnings))
+
+
+@dataclass(frozen=True, slots=True)
+class MarketCandle:
+    exchange: str
+    tradingsymbol: str
+    instrument_token: int
+    interval: str
+    timestamp: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: int
+    open_interest: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.exchange or not self.tradingsymbol:
+            raise ValueError("candle exchange and tradingsymbol are required")
+        if self.instrument_token <= 0:
+            raise ValueError("candle instrument_token must be positive")
+        if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
+            raise ValueError("candle timestamp must be timezone-aware")
+        prices = (self.open, self.high, self.low, self.close)
+        if not all(price.is_finite() and price > 0 for price in prices):
+            raise ValueError("candle OHLC prices must be finite and positive")
+        if self.high < max(self.open, self.close, self.low):
+            raise ValueError("candle high is inconsistent with OHLC values")
+        if self.low > min(self.open, self.close, self.high):
+            raise ValueError("candle low is inconsistent with OHLC values")
+        if self.volume < 0:
+            raise ValueError("candle volume cannot be negative")
+        if self.open_interest is not None and self.open_interest < 0:
+            raise ValueError("candle open interest cannot be negative")
