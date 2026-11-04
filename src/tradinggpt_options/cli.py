@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, time as datetime_time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -30,7 +30,7 @@ def _option_selection_date(market_now: datetime):
     if market_now.tzinfo is None or market_now.utcoffset() is None:
         raise ValueError("market_now must be timezone-aware")
     local_now = market_now.astimezone(MARKET_TIMEZONE)
-    if local_now.time() >= time(hour=15, minute=30):
+    if local_now.time() >= datetime_time(hour=15, minute=30):
         return local_now.date() + timedelta(days=1)
     return local_now.date()
 
