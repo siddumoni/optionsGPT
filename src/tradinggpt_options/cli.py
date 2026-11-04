@@ -96,6 +96,44 @@ def _parse_spot_instrument_mappings(raw: str) -> dict[str, tuple[str, str]]:
     return mappings
 
 
+def _build_kite_client(settings: Settings):
+    if not settings.kite_api_key.strip():
+        raise RuntimeError("Set KITE_API_KEY in your local .env first")
+    try:
+        from kiteconnect import KiteConnect
+    except ImportError as exc:  # pragma: no cover - dependency declared in pyproject
+        raise RuntimeError("Install kiteconnect to use Kite Connect authentication") from exc
+    return KiteConnect(api_key=settings.kite_api_key)
+
+
+def print_kite_login_url(settings: Settings) -> None:
+    client = _build_kite_client(settings)
+    print("Open this URL and complete Zerodha login:")
+    print(client.login_url())
+
+
+def exchange_kite_request_token(
+    settings: Settings,
+    *,
+    request_token: str,
+) -> None:
+    if not settings.kite_api_secret.strip():
+        raise RuntimeError("Set KITE_API_SECRET in your local .env first")
+    if not request_token.strip():
+        raise ValueError("request_token cannot be empty")
+    client = _build_kite_client(settings)
+    session_data = client.generate_session(
+        request_token,
+        api_secret=settings.kite_api_secret,
+    )
+    access_token = session_data.get("access_token")
+    if not access_token:
+        raise RuntimeError("Kite did not return an access token")
+    print("Access token generated. Copy it into KITE_ACCESS_TOKEN in your local .env:")
+    print(access_token)
+    print("Do not commit .env or share this token. Kite access tokens are short-lived.")
+
+
 def _build_kite_rest_client(settings: Settings):
     if not settings.kite_api_key.strip() or not settings.kite_access_token.strip():
         raise RuntimeError(
@@ -604,6 +642,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="tradinggpt-options")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser(
+        "kite-login-url",
+        help="Print the Zerodha Kite Connect login URL",
+    )
+    exchange_parser = subparsers.add_parser(
+        "kite-exchange-token",
+        help="Exchange a Kite request token for a daily access token",
+    )
+    exchange_parser.add_argument(
+        "--request-token",
+        required=True,
+        help="Short-lived request_token from the Zerodha redirect URL",
+    )
+    subparsers.add_parser(
         "init-paper-account",
         help="Initialize the persistent local paper account",
     )
@@ -693,7 +744,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.command == "init-paper-account":
+    if args.command == "kite-login-url":
+        print_kite_login_url(get_settings())
+    elif args.command == "kite-exchange-token":
+        exchange_kite_request_token(
+            get_settings(),
+            request_token=args.request_token,
+        )
+    elif args.command == "init-paper-account":
         initialize_paper_account()
     elif args.command == "collect-options":
         settings = get_settings()
