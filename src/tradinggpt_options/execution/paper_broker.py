@@ -163,13 +163,19 @@ class PaperBroker:
                 realized_today += trade.net_pnl
 
         open_positions = self.open_trades()
-        worst_case_open_exposure = sum(
-            (
-                trade.entry_premium * trade.quantity + trade.charges
-                for trade in open_positions
-            ),
-            Decimal("0"),
-        )
+        worst_case_open_exposure = Decimal("0")
+        for trade in open_positions:
+            estimated_exit_fee, _ = self._calculate_charges(
+                premium=Decimal("0.01"),
+                quantity=trade.quantity,
+                side="SELL",
+                at=now,
+            )
+            worst_case_open_exposure += (
+                trade.entry_premium * trade.quantity
+                + trade.charges
+                + estimated_exit_fee
+            )
         # Count all open premium at risk against today's loss budget. This is
         # conservative and avoids depending on a missing mark for an open leg.
         daily_risk_pnl = realized_today - worst_case_open_exposure
