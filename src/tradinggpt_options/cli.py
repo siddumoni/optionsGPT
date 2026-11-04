@@ -15,6 +15,7 @@ from tradinggpt_options.data.kite_adapter import (
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
 from tradinggpt_options.options.chain import select_near_atm_contracts
 from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
+from tradinggpt_options.storage.repository import MarketDataRepository
 
 MARKET_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
@@ -71,16 +72,109 @@ def _parse_spot_instrument_mappings(raw: str) -> dict[str, tuple[str, str]]:
     return mappings
 
 
+def _build_kite_rest_client(settings: Settings):
+    if not settings.kite_api_key.strip() or not settings.kite_access_token.strip():
+        raise RuntimeError(
+            "Set KITE_API_KEY and KITE_ACCESS_TOKEN in your local .env first"
+        )
+    try:
+        from kiteconnect import KiteConnect
+    except ImportError as exc:  # pragma: no cover - dependency declared in pyproject
+        raise RuntimeError("Install kiteconnect to use live market data") from exc
+    client = KiteConnect(api_key=settings.kite_api_key)
+    client.set_access_token(settings.kite_access_token)
+    return client
+
+
+def _parse_aware_datetime(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "use ISO format with timezone, e.g. 2026-11-04T09:15:00+05:30"
+        ) from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise argparse.ArgumentTypeError("datetime must include a timezone offset")
+    return parsed
+
+
+def backfill_underlying_candles(
+    *,
+    settings: Settings,
+    requested_underlyings: tuple[str, ...],
+    from_date: datetime,
+    to_date: datetime,
+    interval: str,
+) -> None:
+    mappings = _parse_spot_instrument_mappings(
+        settings.kite_underlying_spot_instruments
+    )
+    underlyings = tuple(
+        dict.fromkeys(item.strip().upper() for item in requested_underlyings if item.strip())
+    )
+    if not underlyings:
+        raise ValueError("at least one underlying must be selected")
+    unmapped = sorted(set(underlyings) - set(mappings))
+    if unmapped:
+        raise ValueError(
+            "missing spot instrument mappings for: " + ", ".join(unmapped)
+        )
+
+    client = _build_kite_rest_client(settings)
+    adapter = KiteMarketDataAdapter(client)
+    instruments = [mappings[item] for item in underlyings]
+    snapshot = adapter.fetch_full_quotes(instruments)
+    if snapshot.missing_symbols:
+        raise RuntimeError(
+            "Kite did not return instrument tokens for: "
+            + ", ".join(snapshot.missing_symbols)
+        )
+    quotes = {
+        (quote.exchange, quote.tradingsymbol): quote
+        for quote in snapshot.quotes
+    }
+
+    engine = build_engine(settings.database_url)
+    try:
+        create_schema(engine)
+        factory = build_session_factory(engine)
+        total_saved = 0
+        with factory() as session:
+            repository = MarketDataRepository(session)
+            for underlying in underlyings:
+                exchange, symbol = mappings[underlying]
+                quote = quotes.get((exchange, symbol))
+                if quote is None:
+                    raise RuntimeError(f"missing instrument token for {underlying}")
+                candles = adapter.fetch_historical_candles(
+                    exchange=exchange,
+                    tradingsymbol=symbol,
+                    instrument_token=quote.instrument_token,
+                    from_date=from_date,
+                    to_date=to_date,
+                    interval=interval,
+                    include_oi=True,
+                )
+                saved = repository.save_candles(candles)
+                total_saved += saved
+                print(
+                    f"{underlying} ({exchange}:{symbol}): "
+                    f"fetched={len(candles)} new_saved={saved}"
+                )
+        print(
+            f"Historical underlying candle backfill complete. "
+            f"New rows saved: {total_saved}"
+        )
+    finally:
+        engine.dispose()
+
+
 def collect_options(
     *,
     settings: Settings,
     requested_underlyings: tuple[str, ...],
     strikes_each_side: int,
 ) -> None:
-    if not settings.kite_api_key.strip() or not settings.kite_access_token.strip():
-        raise RuntimeError(
-            "Set KITE_API_KEY and KITE_ACCESS_TOKEN in your local .env first"
-        )
     if strikes_each_side < 0:
         raise ValueError("strikes_each_side cannot be negative")
 
@@ -98,13 +192,7 @@ def collect_options(
             "missing spot instrument mappings for: " + ", ".join(unmapped)
         )
 
-    try:
-        from kiteconnect import KiteConnect
-    except ImportError as exc:  # pragma: no cover - dependency declared in pyproject
-        raise RuntimeError("Install kiteconnect to collect live options data") from exc
-
-    kite = KiteConnect(api_key=settings.kite_api_key)
-    kite.set_access_token(settings.kite_access_token)
+    kite = _build_kite_rest_client(settings)
     adapter = KiteMarketDataAdapter(kite)
 
     engine = build_engine(settings.database_url)
@@ -218,6 +306,32 @@ def main() -> None:
         default=3,
         help="Number of strikes below and above ATM to subscribe (default: 3)",
     )
+    backfill_parser = subparsers.add_parser(
+        "backfill-underlying",
+        help="Download and persist historical underlying OHLCV candles",
+    )
+    backfill_parser.add_argument(
+        "--underlyings",
+        default="",
+        help="Comma-separated underlyings; defaults to configured spot mappings",
+    )
+    backfill_parser.add_argument(
+        "--from-date",
+        required=True,
+        type=_parse_aware_datetime,
+        help="Timezone-aware ISO timestamp, e.g. 2026-11-04T09:15:00+05:30",
+    )
+    backfill_parser.add_argument(
+        "--to-date",
+        required=True,
+        type=_parse_aware_datetime,
+        help="Timezone-aware ISO timestamp, e.g. 2026-11-04T15:30:00+05:30",
+    )
+    backfill_parser.add_argument(
+        "--interval",
+        choices=("minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute", "day"),
+        default="5minute",
+    )
     args = parser.parse_args()
 
     if args.command == "init-paper-account":
@@ -236,6 +350,23 @@ def main() -> None:
             settings=settings,
             requested_underlyings=underlyings,
             strikes_each_side=args.strikes_each_side,
+        )
+    elif args.command == "backfill-underlying":
+        settings = get_settings()
+        configured = _parse_spot_instrument_mappings(
+            settings.kite_underlying_spot_instruments
+        )
+        underlyings = (
+            tuple(item.strip().upper() for item in args.underlyings.split(",") if item.strip())
+            if args.underlyings
+            else tuple(configured)
+        )
+        backfill_underlying_candles(
+            settings=settings,
+            requested_underlyings=underlyings,
+            from_date=args.from_date,
+            to_date=args.to_date,
+            interval=args.interval,
         )
 
 
