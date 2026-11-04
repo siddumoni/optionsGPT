@@ -125,7 +125,7 @@ def test_baseline_returns_no_trade_for_stale_or_insufficient_data() -> None:
     stale_candles = make_candles(now - timedelta(minutes=30))
     stale = analyze_baseline(stale_candles, chain, now=now)
     assert stale.decision.direction == "NO_TRADE"
-    assert any("stale" in item for item in stale.warnings)
+    assert any("stale" in item for item in stale.decision.rationale)
 
 
 def test_baseline_returns_no_trade_when_option_liquidity_filters_fail() -> None:
