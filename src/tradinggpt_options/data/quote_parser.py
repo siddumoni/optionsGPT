@@ -36,8 +36,12 @@ def _depth_levels(levels: Any) -> tuple[DepthLevel, ...]:
 
 
 def parse_kite_quote(
-    *, exchange: str, tradingsymbol: str, instrument_token: int,
-    payload: dict[str, Any], received_at: datetime | None = None,
+    *,
+    exchange: str,
+    tradingsymbol: str,
+    instrument_token: int,
+    payload: dict[str, Any],
+    received_at: datetime | None = None,
 ) -> OptionQuote:
     """Normalize a Kite full-quote payload without inventing absent fields."""
     depth = payload.get("depth") if isinstance(payload.get("depth"), dict) else {}
