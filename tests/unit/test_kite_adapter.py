@@ -119,3 +119,25 @@ def test_websocket_rejects_invalid_token_and_over_limit() -> None:
 def test_request_pacer_rejects_negative_interval() -> None:
     with pytest.raises(ValueError):
         RequestPacer(interval_seconds=-0.1)
+
+
+def test_websocket_session_tracks_connect_disconnect_and_tick_events() -> None:
+    from tradinggpt_options.data.kite_adapter import KiteWebSocketSession
+
+    ticker = FakeTicker()
+    received: list[list[dict]] = []
+    states: list[tuple[str, str | None]] = []
+    session = KiteWebSocketSession(
+        ticker,
+        on_ticks=received.append,
+        on_state=lambda state, detail: states.append((state, detail)),
+    )
+    ticker.on_connect(ticker, {})
+    assert session.is_connected
+    ticker.on_ticks(ticker, [{"instrument_token": 123, "last_price": 100}])
+    assert received == [[{"instrument_token": 123, "last_price": 100}]]
+    assert session.last_tick_at is not None
+    ticker.on_close(ticker, 1006, "network disconnected")
+    assert not session.is_connected
+    assert states[0] == ("connected", None)
+    assert states[-1] == ("disconnected", "1006: network disconnected")
