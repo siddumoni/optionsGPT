@@ -39,26 +39,43 @@ def size_long_option_position(
     current_daily_net_pnl: Decimal = Decimal("0"),
     current_open_positions: int = 0,
 ) -> SizingResult:
-    """Conservative long-option sizing; risk is bounded by premium debit + entry costs.
-
-    This is a paper-risk primitive, not a recommendation to trade.
-    """
+    """Bound long-option premium exposure by risk and available cash."""
     if available_cash <= 0 or premium_per_unit <= 0 or lot_size <= 0:
-        return SizingResult(False, 0, 0, Decimal("0"), Decimal("0"), "invalid capital/premium/lot")
+        return SizingResult(
+            False, 0, 0, Decimal("0"), Decimal("0"), "invalid capital/premium/lot"
+        )
     if current_open_positions >= limits.max_concurrent_positions:
-        return SizingResult(False, 0, 0, Decimal("0"), Decimal("0"), "position limit reached")
+        return SizingResult(
+            False, 0, 0, Decimal("0"), Decimal("0"), "position limit reached"
+        )
     if current_daily_net_pnl <= -limits.max_daily_loss:
-        return SizingResult(False, 0, 0, Decimal("0"), Decimal("0"), "daily loss limit reached")
+        return SizingResult(
+            False, 0, 0, Decimal("0"), Decimal("0"), "daily loss limit reached"
+        )
 
     daily_headroom = limits.max_daily_loss + current_daily_net_pnl
     per_lot_debit = premium_per_unit * lot_size
-    per_lot_risk = per_lot_debit
     max_cash = available_cash * limits.max_capital_utilization
-    max_risk_lots = int(min(limits.max_position_loss, daily_headroom) // per_lot_risk)
-    max_cash_lots = int(max_cash // per_lot_debit)
-    lots = min(max_risk_lots, max_cash_lots)
+    risk_budget = min(limits.max_position_loss, daily_headroom)
+    lots_by_risk = int(risk_budget // per_lot_debit)
+    lots_by_cash = int(max_cash // per_lot_debit)
+    lots = min(lots_by_risk, lots_by_cash)
     if lots < 1:
-        return SizingResult(False, 0, 0, Decimal("0"), Decimal("0"), "one lot exceeds capital or risk headroom")
+        return SizingResult(
+            False,
+            0,
+            0,
+            Decimal("0"),
+            Decimal("0"),
+            "one lot exceeds capital or risk headroom",
+        )
     quantity = lots * lot_size
     debit = per_lot_debit * lots
-    return SizingResult(True, lots, quantity, debit, debit, "approved within configured premium-risk and cash limits")
+    return SizingResult(
+        True,
+        lots,
+        quantity,
+        debit,
+        debit,
+        "approved within configured premium-risk and cash limits",
+    )
