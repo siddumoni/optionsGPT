@@ -123,3 +123,34 @@ class CandleSnapshot(Base):
     close: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     volume: Mapped[int] = mapped_column(Integer)
     open_interest: Mapped[int | None] = mapped_column(Integer)
+
+
+class StrategyDecisionSnapshot(Base):
+    __tablename__ = "strategy_decision_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    underlying: Mapped[str] = mapped_column(String(64), index=True)
+    expiry: Mapped[date] = mapped_column(Date)
+    decision: Mapped[str] = mapped_column(String(16), index=True)
+    confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    estimated_win_probability: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    model_version: Mapped[str] = mapped_column(String(64))
+    spot_price: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    risk_free_rate: Mapped[Decimal] = mapped_column(Numeric(10, 6))
+    candle_source: Mapped[str] = mapped_column(String(64))
+    candle_count: Mapped[int] = mapped_column(Integer)
+    candidate_symbol: Mapped[str | None] = mapped_column(String(64))
+    candidate_strike: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    candidate_option_type: Mapped[str | None] = mapped_column(String(2))
+    candidate_mid: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    candidate_iv: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
+    candidate_delta: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
+    rationale_json: Mapped[str] = mapped_column(Text, default="[]")
+    opposing_evidence_json: Mapped[str] = mapped_column(Text, default="[]")
+    warnings_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        index=True,
+    )
