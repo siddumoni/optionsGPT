@@ -61,16 +61,16 @@ A one-week schedule is a time-box for a **paper-trading MVP**, not a guarantee o
 
 ## Implementation checkpoint — 4 November 2026
 
-Estimated engineering completion: **approximately 50% of the paper MVP**. This is a scope estimate, not a trading-performance metric.
+Estimated engineering completion: **approximately 60% of the paper MVP**. This is a scope estimate, not a trading-performance metric.
 
 | Day | Status | Evidence / remaining work |
 |---|---|---|
 | Day 1 — Contract/data foundation | Implemented | Daily NFO parser, dated contracts, expiry/ATM selection, SQLite persistence |
-| Day 2 — Live data collection | Mostly implemented | Read-only Kite REST/WebSocket collector, reconnect resubscription, stale/depth checks, foreground CLI; real credentials, scheduled operation and service supervision remain |
+| Day 2 — Live data collection | Mostly implemented | Read-only Kite REST/WebSocket collector, reconnect resubscription, futures-backed candle history, stale/depth checks and foreground CLI; real credentials, scheduled operation and service supervision remain |
 | Day 3 — Options analytics | Partially implemented | BSM Greeks, IV solver, quality-aware CE/PE chain view; persisted chain snapshots, OI changes and market-specific model validation remain |
-| Day 4 — Research and risk | Partially implemented | Explainable EMA/VWAP/RSI/volume baseline and CE/PE liquidity/delta ranking; multi-timeframe regime, event/news evidence and enforced risk limits remain |
-| Day 5 — Paper execution | Foundation implemented | Persistent ledger, depth VWAP, insufficient-depth rejection, effective-dated charges; partial fills, automated exits, restart recovery and circuit breakers remain |
-| Day 6 — Dashboard and reporting | Not implemented | Read-only FastAPI endpoints exist; visual dashboard, decision journal and downloadable reports remain |
+| Day 4 — Research and risk | Partially implemented | One-pass analysis CLI, explainable EMA/VWAP/RSI/volume baseline, CE/PE liquidity/delta ranking and enforced paper premium/daily-loss/concurrent-position limits; multi-timeframe regime and event/news evidence remain |
+| Day 5 — Paper execution | Foundation implemented | Persistent ledger, depth VWAP, insufficient-depth rejection, effective-dated charges and mandatory explicit risk configuration; partial fills, automated exits and restart recovery remain |
+| Day 6 — Dashboard and reporting | Partially implemented | Local read-only dashboard with 10-second quote/ledger refresh; decision journal and downloadable end-of-day reports remain |
 | Day 7 — Validation | In progress | Python 3.12/3.13 CI and deterministic tests; real Kite-session and multi-day forward paper validation remain |
 
 The current branch is intentionally paper-only. Do not enable live execution based on this checkpoint.
