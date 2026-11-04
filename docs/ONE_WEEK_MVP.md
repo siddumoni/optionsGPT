@@ -61,7 +61,7 @@ A one-week schedule is a time-box for a **paper-trading MVP**, not a guarantee o
 
 ## Implementation checkpoint — 4 November 2026
 
-Estimated engineering completion: **approximately 60% of the paper MVP**. This is a scope estimate, not a trading-performance metric.
+Estimated engineering completion: **approximately 65% of the paper MVP**. This is a scope estimate, not a trading-performance metric.
 
 | Day | Status | Evidence / remaining work |
 |---|---|---|
@@ -70,7 +70,7 @@ Estimated engineering completion: **approximately 60% of the paper MVP**. This i
 | Day 3 — Options analytics | Partially implemented | BSM Greeks, IV solver, quality-aware CE/PE chain view; persisted chain snapshots, OI changes and market-specific model validation remain |
 | Day 4 — Research and risk | Partially implemented | One-pass analysis CLI, explainable EMA/VWAP/RSI/volume baseline, CE/PE liquidity/delta ranking and enforced paper premium/daily-loss/concurrent-position limits; multi-timeframe regime and event/news evidence remain |
 | Day 5 — Paper execution | Foundation implemented | Persistent ledger, depth VWAP, insufficient-depth rejection, effective-dated charges and mandatory explicit risk configuration; partial fills, automated exits and restart recovery remain |
-| Day 6 — Dashboard and reporting | Partially implemented | Local read-only dashboard with 10-second quote/ledger refresh; decision journal and downloadable end-of-day reports remain |
+| Day 6 — Dashboard and reporting | Partially implemented | Local read-only dashboard with 10-second quote/decision/ledger refresh and persisted baseline decision journal; scanner diagnostics and downloadable end-of-day reports remain |
 | Day 7 — Validation | In progress | Python 3.12/3.13 CI and deterministic tests; real Kite-session and multi-day forward paper validation remain |
 
 The current branch is intentionally paper-only. Do not enable live execution based on this checkpoint.
