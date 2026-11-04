@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tradinggpt_options.storage.database import Base
@@ -34,7 +41,11 @@ class QuoteSnapshot(Base):
     tradingsymbol: Mapped[str] = mapped_column(String(64), index=True)
     instrument_token: Mapped[int] = mapped_column(Integer)
     exchange_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        index=True,
+    )
     last_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     best_bid: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     best_ask: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
