@@ -73,9 +73,14 @@ class KiteOptionsCollector:
         *,
         underlyings: Iterable[str] | None = None,
         snapshot_date: date | None = None,
+        instrument_master_csv: str | None = None,
     ) -> tuple[OptionContract, ...]:
-        """Fetch, parse and persist today's NFO-OPT CE/PE contract master."""
-        csv_text = self._adapter.fetch_option_instrument_master()
+        """Parse and persist today's NFO-OPT CE/PE contract master."""
+        csv_text = (
+            instrument_master_csv
+            if instrument_master_csv is not None
+            else self._adapter.fetch_option_instrument_master()
+        )
         parsed = parse_kite_instruments(csv_text, underlyings=underlyings)
         if not parsed.contracts:
             raise RuntimeError(
