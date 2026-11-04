@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from tradinggpt_options import __version__
 from tradinggpt_options.config.settings import Settings, get_settings
@@ -15,7 +16,12 @@ from tradinggpt_options.storage.database import (
     build_session_factory,
     create_schema,
 )
-from tradinggpt_options.storage.tables import PaperAccount, PaperTrade
+from tradinggpt_options.storage.tables import (
+    InstrumentSnapshot,
+    PaperAccount,
+    PaperTrade,
+    QuoteSnapshot,
+)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -153,6 +159,110 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "exit_reason": trade.exit_reason,
                 }
                 for trade in trades
+            ]
+
+
+    @application.get("/api/v1/market/instruments", tags=["market-data"])
+    def market_instruments(underlying: str | None = None) -> list[dict[str, Any]]:
+        """Read the latest persisted NFO option instrument-master snapshot."""
+        with session_factory() as session:
+            latest_date = select(
+                func.max(InstrumentSnapshot.snapshot_date)
+            ).scalar_subquery()
+            statement = select(InstrumentSnapshot).where(
+                InstrumentSnapshot.snapshot_date == latest_date
+            )
+            if underlying:
+                statement = statement.where(
+                    InstrumentSnapshot.underlying == underlying.strip().upper()
+                )
+            rows = session.scalars(
+                statement.order_by(
+                    InstrumentSnapshot.underlying,
+                    InstrumentSnapshot.expiry,
+                    InstrumentSnapshot.strike,
+                    InstrumentSnapshot.option_type,
+                )
+            ).all()
+            return [
+                {
+                    "snapshot_date": row.snapshot_date.isoformat(),
+                    "exchange": row.exchange,
+                    "tradingsymbol": row.tradingsymbol,
+                    "instrument_token": row.instrument_token,
+                    "underlying": row.underlying,
+                    "expiry": row.expiry.isoformat(),
+                    "strike": decimal_string(row.strike),
+                    "option_type": row.option_type,
+                    "lot_size": row.lot_size,
+                    "tick_size": decimal_string(row.tick_size),
+                }
+                for row in rows
+            ]
+
+    @application.get("/api/v1/market/quotes", tags=["market-data"])
+    def market_quotes(limit: int = 100) -> list[dict[str, Any]]:
+        """Return the latest persisted quote per contract, including full depth."""
+        if not 1 <= limit <= 500:
+            raise HTTPException(
+                status_code=422,
+                detail="limit must be between 1 and 500",
+            )
+        ranked = (
+            select(
+                QuoteSnapshot.id.label("quote_id"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        QuoteSnapshot.exchange,
+                        QuoteSnapshot.tradingsymbol,
+                    ),
+                    order_by=(
+                        QuoteSnapshot.received_at.desc(),
+                        QuoteSnapshot.id.desc(),
+                    ),
+                )
+                .label("row_number"),
+            )
+            .subquery()
+        )
+        with session_factory() as session:
+            rows = session.scalars(
+                select(QuoteSnapshot)
+                .join(ranked, QuoteSnapshot.id == ranked.c.quote_id)
+                .where(ranked.c.row_number == 1)
+                .order_by(QuoteSnapshot.received_at.desc())
+                .limit(limit)
+            ).all()
+            return [
+                {
+                    "exchange": row.exchange,
+                    "tradingsymbol": row.tradingsymbol,
+                    "instrument_token": row.instrument_token,
+                    "exchange_timestamp": datetime_string(row.exchange_timestamp),
+                    "received_at": datetime_string(row.received_at),
+                    "last_price": (
+                        decimal_string(row.last_price)
+                        if row.last_price is not None else None
+                    ),
+                    "best_bid": (
+                        decimal_string(row.best_bid)
+                        if row.best_bid is not None else None
+                    ),
+                    "best_ask": (
+                        decimal_string(row.best_ask)
+                        if row.best_ask is not None else None
+                    ),
+                    "bid_depth": json.loads(row.bid_depth_json),
+                    "ask_depth": json.loads(row.ask_depth_json),
+                    "volume": row.volume,
+                    "open_interest": row.open_interest,
+                    "source": row.source,
+                    "quality_flags": [
+                        flag for flag in row.quality_flags.split(";") if flag
+                    ],
+                }
+                for row in rows
             ]
 
     return application
