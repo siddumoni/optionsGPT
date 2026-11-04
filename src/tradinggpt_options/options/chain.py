@@ -73,6 +73,7 @@ def select_near_atm_contracts(
     contracts: Iterable[OptionContract],
     *,
     spot_prices: dict[str, Decimal],
+    as_of: date,
     strikes_each_side: int = 3,
 ) -> tuple[OptionContract, ...]:
     """Select both CE and PE contracts around ATM for each supplied underlying.
@@ -95,7 +96,7 @@ def select_near_atm_contracts(
         universe = by_underlying.get(key, [])
         if not universe:
             continue
-        expiry = select_nearest_expiry(universe, as_of=date.today())
+        expiry = select_nearest_expiry(universe, as_of=as_of)
         if expiry is None:
             continue
         expiry_contracts = [item for item in universe if item.expiry == expiry]
