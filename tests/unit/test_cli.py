@@ -1,6 +1,7 @@
 import pytest
 
 from tradinggpt_options.cli import (
+    _completed_intraday_candles,
     _option_selection_date,
     _parse_aware_datetime,
     _parse_spot_instrument_mappings,
@@ -55,3 +56,42 @@ def test_expiry_selection_rolls_forward_after_nse_market_close() -> None:
     at_close = datetime(2026, 11, 4, 15, 30, tzinfo=market_tz)
     assert _option_selection_date(before_close).isoformat() == "2026-11-04"
     assert _option_selection_date(at_close).isoformat() == "2026-11-05"
+
+
+def test_analysis_uses_only_completed_intraday_candles() -> None:
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from tradinggpt_options.data.models import MarketCandle
+
+    now = datetime(2026, 11, 4, 10, 0, tzinfo=UTC)
+    completed = MarketCandle(
+        exchange="NFO",
+        tradingsymbol="NIFTY26NOVFUT",
+        instrument_token=123,
+        interval="5minute",
+        timestamp=now - timedelta(minutes=10),
+        open=Decimal("100"),
+        high=Decimal("102"),
+        low=Decimal("99"),
+        close=Decimal("101"),
+        volume=1000,
+    )
+    in_progress = MarketCandle(
+        exchange="NFO",
+        tradingsymbol="NIFTY26NOVFUT",
+        instrument_token=123,
+        interval="5minute",
+        timestamp=now - timedelta(minutes=2),
+        open=Decimal("101"),
+        high=Decimal("103"),
+        low=Decimal("100"),
+        close=Decimal("102"),
+        volume=500,
+    )
+    result = _completed_intraday_candles(
+        [completed, in_progress],
+        now=now,
+        interval_seconds=300,
+    )
+    assert result == (completed,)
