@@ -4,12 +4,12 @@ from types import SimpleNamespace
 import pytest
 
 from tradinggpt_options.cli import (
-    exchange_kite_request_token,
-    print_kite_login_url,
     _completed_intraday_candles,
     _option_selection_date,
     _parse_aware_datetime,
     _parse_spot_instrument_mappings,
+    exchange_kite_request_token,
+    print_kite_login_url,
 )
 from tradinggpt_options.config.settings import Settings
 
