@@ -55,9 +55,10 @@ class PaperFill:
 class PaperBroker:
     """Local long-options paper broker. Has no connection to broker order APIs.
 
-    Entry uses best ask; exit uses best bid. If depth is missing, stale or crossed,
-    execution is rejected. By default, each side uses the effective-dated Zerodha/NSE
-    options charge schedule; a flat override is available only for controlled tests.
+    Entry consumes ask depth and exit consumes bid depth using VWAP. Stale, crossed,
+    one-sided or insufficient-depth quotes are rejected. Each side uses the
+    effective-dated Zerodha/NSE charge schedule. Opening a position also requires
+    explicit risk limits; open premium is conservatively counted against daily loss.
     """
 
     def __init__(
