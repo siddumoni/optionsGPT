@@ -34,3 +34,18 @@ The adapter deliberately exposes no place/modify/cancel order methods. It can on
 - https://kite.trade/docs/connect/v3/websocket/
 - https://kite.trade/docs/connect/v3/historical/
 - https://github.com/zerodha/pykiteconnect
+
+
+## Rolling near-ATM WebSocket window
+
+The foreground collector does not pin its subscriptions for the entire session.
+Every five minutes it refreshes the configured underlying spot quotes, reselects
+the nearest non-expired expiry and the configured strike window, unsubscribes
+contracts that have moved out of range, and subscribes newly selected tokens in
+full mode. The current token set is also used after automatic WebSocket
+reconnects. If the refresh spot quote is missing or stale, the collector keeps
+the previous subscription window and retries after one minute.
+
+This is still a bounded near-ATM archive, not a complete historical option-chain
+dataset. The selected underlyings, expiry and strike window define which option
+contracts are persisted.
