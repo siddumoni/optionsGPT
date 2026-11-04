@@ -93,6 +93,8 @@ class PaperTrade(Base):
     status: Mapped[str] = mapped_column(String(16), index=True)
     gross_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
     charges: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
+    entry_charges_json: Mapped[str] = mapped_column(Text, default="{}")
+    exit_charges_json: Mapped[str] = mapped_column(Text, default="{}")
     net_pnl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
     entry_reason: Mapped[str] = mapped_column(String(2048), default="")
     exit_reason: Mapped[str] = mapped_column(String(2048), default="")
