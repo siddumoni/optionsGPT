@@ -2,19 +2,25 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from tradinggpt_options.config.settings import Settings, get_settings
 from tradinggpt_options.data.collector import KiteOptionsCollector
+from tradinggpt_options.data.models import assess_quote_quality
 from tradinggpt_options.data.kite_adapter import (
     KiteMarketDataAdapter,
     create_kite_ticker,
 )
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
-from tradinggpt_options.options.chain import select_near_atm_contracts
+from tradinggpt_options.options.chain import (
+    select_near_atm_contracts,
+    select_nearest_expiry,
+)
+from tradinggpt_options.options.chain_analytics import build_option_chain_view
 from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
+from tradinggpt_options.research.baseline import analyze_baseline
 from tradinggpt_options.storage.repository import MarketDataRepository
 
 MARKET_TIMEZONE = ZoneInfo("Asia/Kolkata")
@@ -165,6 +171,173 @@ def backfill_underlying_candles(
             f"Historical underlying candle backfill complete. "
             f"New rows saved: {total_saved}"
         )
+    finally:
+        engine.dispose()
+
+
+def analyze_options(
+    *,
+    settings: Settings,
+    requested_underlyings: tuple[str, ...],
+    strikes_each_side: int,
+    risk_free_rate: float,
+    interval: str,
+) -> None:
+    """Run a single read-only live-data analysis pass; never places orders."""
+    mappings = _parse_spot_instrument_mappings(
+        settings.kite_underlying_spot_instruments
+    )
+    underlyings = tuple(
+        dict.fromkeys(item.strip().upper() for item in requested_underlyings if item.strip())
+    )
+    if not underlyings:
+        raise ValueError("at least one underlying must be selected")
+    unmapped = sorted(set(underlyings) - set(mappings))
+    if unmapped:
+        raise ValueError(
+            "missing spot instrument mappings for: " + ", ".join(unmapped)
+        )
+
+    kite = _build_kite_rest_client(settings)
+    adapter = KiteMarketDataAdapter(kite)
+    engine = build_engine(settings.database_url)
+    try:
+        create_schema(engine)
+        factory = build_session_factory(engine)
+        collector = KiteOptionsCollector(
+            adapter=adapter,
+            session_factory=factory,
+        )
+        market_now = datetime.now(MARKET_TIMEZONE)
+        market_date = market_now.date()
+        contracts = collector.load_daily_instrument_master(
+            underlyings=set(underlyings),
+            snapshot_date=market_date,
+        )
+        spot_snapshot = adapter.fetch_full_quotes(
+            [mappings[item] for item in underlyings]
+        )
+        if spot_snapshot.missing_symbols:
+            raise RuntimeError(
+                "Kite did not return spot quotes for: "
+                + ", ".join(spot_snapshot.missing_symbols)
+            )
+
+        now = datetime.now(UTC)
+        spot_quotes = {
+            (quote.exchange, quote.tradingsymbol): quote
+            for quote in spot_snapshot.quotes
+        }
+        spot_prices: dict[str, Decimal] = {}
+        for underlying in underlyings:
+            exchange, symbol = mappings[underlying]
+            quote = spot_quotes.get((exchange, symbol))
+            if quote is None or quote.last_price is None or quote.last_price <= 0:
+                raise RuntimeError(f"missing valid spot price for {underlying}")
+            observed_at = quote.exchange_timestamp or quote.received_at
+            age = (now - observed_at).total_seconds()
+            if age < -5 or age > 30:
+                raise RuntimeError(f"spot quote for {underlying} is stale")
+            spot_prices[underlying] = quote.last_price
+
+        selected = select_near_atm_contracts(
+            contracts,
+            spot_prices=spot_prices,
+            as_of=market_date,
+            strikes_each_side=strikes_each_side,
+        )
+        if not selected:
+            raise RuntimeError("no near-ATM CE/PE contracts were selected")
+        option_snapshot = adapter.fetch_full_quotes(
+            [(contract.exchange, contract.tradingsymbol) for contract in selected]
+        )
+        option_quotes = {
+            (quote.exchange, quote.tradingsymbol): quote
+            for quote in option_snapshot.quotes
+        }
+
+        option_flags = tuple(
+            assess_quote_quality(
+                quote,
+                now=now,
+                max_age_seconds=15,
+            ).warnings
+            for quote in option_snapshot.quotes
+        )
+        with factory() as session:
+            repository = MarketDataRepository(session)
+            repository.save_quotes(spot_snapshot.quotes)
+            repository.save_quotes(
+                option_snapshot.quotes,
+                quality_flags=option_flags,
+            )
+
+        print("TradingGPT Options — read-only analysis pass")
+        print("Mode: PAPER / NO ORDER PLACEMENT")
+        print(f"Snapshot: {now.isoformat()}")
+        print(f"Risk-free rate assumption: {risk_free_rate:.4%}")
+        print(
+            f"Contracts selected: {len(selected)}; "
+            f"quotes received: {len(option_snapshot.quotes)}; "
+            f"missing quotes: {len(option_snapshot.missing_symbols)}"
+        )
+
+        for underlying in underlyings:
+            underlying_contracts = [
+                item for item in selected if item.underlying == underlying
+            ]
+            expiry = select_nearest_expiry(
+                underlying_contracts,
+                as_of=market_date,
+            )
+            if expiry is None:
+                print(f"{underlying}: NO_TRADE — no non-expired option expiry")
+                continue
+            exchange, symbol = mappings[underlying]
+            spot_quote = spot_quotes[(exchange, symbol)]
+            chain = build_option_chain_view(
+                underlying_contracts,
+                option_quotes,
+                underlying=underlying,
+                expiry=expiry,
+                spot_price=spot_quote.last_price,
+                snapshot_at=now,
+                risk_free_rate=risk_free_rate,
+            )
+            candles = adapter.fetch_historical_candles(
+                exchange=exchange,
+                tradingsymbol=symbol,
+                instrument_token=spot_quote.instrument_token,
+                from_date=market_now - timedelta(days=5),
+                to_date=market_now,
+                interval=interval,
+                include_oi=True,
+            )
+            with factory() as session:
+                repository = MarketDataRepository(session)
+                repository.save_candles(candles)
+
+            analysis = analyze_baseline(candles, chain, now=now)
+            decision = analysis.decision
+            print(
+                f"\n{underlying} | expiry={expiry.isoformat()} | "
+                f"spot={spot_quote.last_price} | decision={decision.direction} | "
+                f"heuristic_score={decision.confidence_score}"
+            )
+            if analysis.candidate is not None:
+                leg = analysis.candidate
+                print(
+                    f"Candidate: {leg.contract.tradingsymbol} | "
+                    f"mid={leg.mid_price} | delta={leg.greeks.delta:.3f} | "
+                    f"IV={leg.implied_volatility:.2%} | "
+                    f"spread={leg.spread_percent:.2f}%"
+                )
+            for reason in decision.rationale:
+                print(f"- {reason}")
+            for warning in analysis.warnings:
+                print(f"WARNING: {warning}")
+
+        print("\nAnalysis complete. No order was submitted.")
     finally:
         engine.dispose()
 
@@ -322,6 +495,41 @@ def main() -> None:
         default=3,
         help="Number of strikes below and above ATM to subscribe (default: 3)",
     )
+    analyze_parser = subparsers.add_parser(
+        "analyze-options",
+        help="Run one read-only baseline analysis pass for selected underlyings",
+    )
+    analyze_parser.add_argument(
+        "--underlyings",
+        default="",
+        help="Comma-separated underlyings; defaults to configured spot mappings",
+    )
+    analyze_parser.add_argument(
+        "--strikes-each-side",
+        type=int,
+        default=3,
+        help="Number of strikes below and above ATM to analyze",
+    )
+    analyze_parser.add_argument(
+        "--risk-free-rate",
+        type=float,
+        required=True,
+        help="Annualized risk-free-rate assumption as a decimal, e.g. 0.065",
+    )
+    analyze_parser.add_argument(
+        "--interval",
+        choices=(
+            "minute",
+            "3minute",
+            "5minute",
+            "10minute",
+            "15minute",
+            "30minute",
+            "60minute",
+            "day",
+        ),
+        default="5minute",
+    )
     backfill_parser = subparsers.add_parser(
         "backfill-underlying",
         help="Download and persist historical underlying OHLCV candles",
@@ -375,6 +583,23 @@ def main() -> None:
             settings=settings,
             requested_underlyings=underlyings,
             strikes_each_side=args.strikes_each_side,
+        )
+    elif args.command == "analyze-options":
+        settings = get_settings()
+        configured = _parse_spot_instrument_mappings(
+            settings.kite_underlying_spot_instruments
+        )
+        underlyings = (
+            tuple(item.strip().upper() for item in args.underlyings.split(",") if item.strip())
+            if args.underlyings
+            else tuple(configured)
+        )
+        analyze_options(
+            settings=settings,
+            requested_underlyings=underlyings,
+            strikes_each_side=args.strikes_each_side,
+            risk_free_rate=args.risk_free_rate,
+            interval=args.interval,
         )
     elif args.command == "backfill-underlying":
         settings = get_settings()
