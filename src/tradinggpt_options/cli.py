@@ -12,6 +12,7 @@ from tradinggpt_options.data.kite_adapter import (
     KiteMarketDataAdapter,
     create_kite_ticker,
 )
+from tradinggpt_options.data.instrument_master import parse_kite_futures_instruments
 from tradinggpt_options.data.models import assess_quote_quality
 from tradinggpt_options.execution.paper_broker import PaperBroker, PaperExecutionConfig
 from tradinggpt_options.options.chain import (
@@ -220,10 +221,16 @@ def analyze_options(
         market_now = datetime.now(MARKET_TIMEZONE)
         market_date = market_now.date()
         selection_date = _option_selection_date(market_now)
+        nfo_master_csv = adapter.fetch_option_instrument_master()
         contracts = collector.load_daily_instrument_master(
             underlyings=set(underlyings),
             snapshot_date=market_date,
+            instrument_master_csv=nfo_master_csv,
         )
+        futures = parse_kite_futures_instruments(
+            nfo_master_csv,
+            underlyings=set(underlyings),
+        ).contracts
         spot_snapshot = adapter.fetch_full_quotes(
             [mappings[item] for item in underlyings]
         )
@@ -314,10 +321,31 @@ def analyze_options(
                 snapshot_at=now,
                 risk_free_rate=risk_free_rate,
             )
+            underlying_futures = [
+                future
+                for future in futures
+                if future.underlying == underlying
+                and future.expiry >= selection_date
+            ]
+            if not underlying_futures:
+                print(
+                    f"{underlying}: NO_TRADE — no current NFO future available "
+                    "for volume-backed VWAP analysis"
+                )
+                continue
+            future_expiry = min(future.expiry for future in underlying_futures)
+            future_contract = min(
+                (
+                    future
+                    for future in underlying_futures
+                    if future.expiry == future_expiry
+                ),
+                key=lambda future: future.tradingsymbol,
+            )
             candles = adapter.fetch_historical_candles(
-                exchange=exchange,
-                tradingsymbol=symbol,
-                instrument_token=spot_quote.instrument_token,
+                exchange=future_contract.exchange,
+                tradingsymbol=future_contract.tradingsymbol,
+                instrument_token=future_contract.instrument_token,
                 from_date=market_now - timedelta(days=5),
                 to_date=market_now,
                 interval=interval,
@@ -331,7 +359,9 @@ def analyze_options(
             decision = analysis.decision
             print(
                 f"\n{underlying} | expiry={expiry.isoformat()} | "
-                f"spot={spot_quote.last_price} | decision={decision.direction} | "
+                f"spot={spot_quote.last_price} | "
+                f"candle_source={future_contract.tradingsymbol} | "
+                f"decision={decision.direction} | "
                 f"heuristic_score={decision.confidence_score}"
             )
             if analysis.candidate is not None:
