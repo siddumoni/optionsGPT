@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tradinggpt_options.data.models import OptionContract, OptionQuote, assess_quote_quality
+from tradinggpt_options.execution.charges import NseOptionsChargeSchedule, OrderSide
 from tradinggpt_options.storage.tables import PaperAccount, PaperTrade
 
 
@@ -16,15 +19,20 @@ from tradinggpt_options.storage.tables import PaperAccount, PaperTrade
 class PaperExecutionConfig:
     initial_capital: Decimal = Decimal("100000")
     max_quote_age_seconds: int = 15
-    charges_per_side: Decimal = Decimal("0")
+    charges_per_side: Decimal | None = None
+    charge_schedule: NseOptionsChargeSchedule = field(
+        default_factory=NseOptionsChargeSchedule
+    )
 
     def __post_init__(self) -> None:
         if self.initial_capital <= 0:
             raise ValueError("initial_capital must be positive")
         if self.max_quote_age_seconds <= 0:
             raise ValueError("max_quote_age_seconds must be positive")
-        if self.charges_per_side < 0:
-            raise ValueError("charges_per_side cannot be negative")
+        if self.charges_per_side is not None and (
+            not self.charges_per_side.is_finite() or self.charges_per_side < 0
+        ):
+            raise ValueError("charges_per_side override must be finite and nonnegative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +88,38 @@ class PaperBroker:
             raise RuntimeError("paper account disappeared from storage")
         return account
 
+    def _calculate_charges(
+        self,
+        *,
+        premium: Decimal,
+        quantity: int,
+        side: OrderSide,
+        at: datetime,
+    ) -> tuple[Decimal, str]:
+        if self.config.charges_per_side is not None:
+            amount = self.config.charges_per_side.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            payload = {
+                "schedule_version": "flat-override",
+                "flat_override": format(amount, "f"),
+                "total": format(amount, "f"),
+            }
+            return amount, json.dumps(payload, separators=(",", ":"))
+
+        trade_date = at.astimezone(ZoneInfo("Asia/Kolkata")).date()
+        breakdown = self.config.charge_schedule.calculate_order_charges(
+            premium=premium,
+            quantity=quantity,
+            side=side,
+            trade_date=trade_date,
+        )
+        payload = {
+            "schedule_version": self.config.charge_schedule.version,
+            **breakdown.as_dict(),
+        }
+        return breakdown.total, json.dumps(payload, separators=(",", ":"))
+
     def _validate_quote(self, quote: OptionQuote, *, now: datetime) -> None:
         quality = assess_quote_quality(
             quote,
@@ -117,7 +157,13 @@ class PaperBroker:
         if ask is None:
             raise ValueError("best ask is required")
         notional = (ask * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        total_debit = notional + self.config.charges_per_side
+        entry_charge, entry_charges_json = self._calculate_charges(
+            premium=ask,
+            quantity=quantity,
+            side="BUY",
+            at=observed_now,
+        )
+        total_debit = notional + entry_charge
         account = self._account()
         if account.cash_balance < total_debit:
             raise ValueError("insufficient paper cash for premium debit and charges")
@@ -151,7 +197,9 @@ class PaperBroker:
                 entry_at=observed_now,
                 status="OPEN",
                 gross_pnl=Decimal("0"),
-                charges=self.config.charges_per_side,
+                charges=entry_charge,
+                entry_charges_json=entry_charges_json,
+                exit_charges_json="{}",
                 net_pnl=Decimal("0"),
                 entry_reason=reason[:2048],
             )
@@ -195,8 +243,14 @@ class PaperBroker:
         gross_pnl = ((bid - trade.entry_premium) * trade.quantity).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
-        exit_charge = self.config.charges_per_side
+        exit_charge, exit_charges_json = self._calculate_charges(
+            premium=bid,
+            quantity=trade.quantity,
+            side="SELL",
+            at=observed_now,
+        )
         trade.charges += exit_charge
+        trade.exit_charges_json = exit_charges_json
         trade.gross_pnl = gross_pnl
         trade.net_pnl = gross_pnl - trade.charges
         trade.exit_premium = bid
