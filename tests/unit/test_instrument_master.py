@@ -1,4 +1,7 @@
-from tradinggpt_options.data.instrument_master import parse_kite_instruments
+from tradinggpt_options.data.instrument_master import (
+    parse_kite_futures_instruments,
+    parse_kite_instruments,
+)
 
 HEADER = (
     "instrument_token,exchange_token,tradingsymbol,name,last_price,"
@@ -63,3 +66,19 @@ def test_rejects_blank_name_for_unrecognized_index_or_stock_symbol() -> None:
     result = parse_kite_instruments(HEADER + row)
     assert result.contracts == ()
     assert result.rejected_rows == 1
+
+
+def test_parses_nearest_expiry_nfo_futures_with_blank_index_names() -> None:
+    rows = [
+        "301,1,NIFTY26NOVFUT,,0,2026-11-26,0,0.05,65,FUT,NFO-FUT,NFO",
+        "302,2,BANKNIFTY26NOVFUT,,0,2026-11-26,0,0.05,30,FUT,NFO-FUT,NFO",
+        "303,3,RELIANCE26NOVFUT,RELIANCE,0,2026-11-26,0,0.05,250,FUT,NFO-FUT,NFO",
+    ]
+    result = parse_kite_futures_instruments(HEADER + "\n".join(rows) + "\n")
+    assert len(result.contracts) == 3
+    assert {item.underlying for item in result.contracts} == {
+        "NIFTY",
+        "BANKNIFTY",
+        "RELIANCE",
+    }
+    assert result.rejected_rows == 0
