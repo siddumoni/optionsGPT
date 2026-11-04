@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import time
 from datetime import UTC, datetime, timedelta
 from datetime import time as datetime_time
 from decimal import Decimal
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from tradinggpt_options.config.settings import Settings, get_settings
@@ -28,6 +30,7 @@ from tradinggpt_options.research.baseline import (
 )
 from tradinggpt_options.storage.database import build_engine, build_session_factory, create_schema
 from tradinggpt_options.storage.repository import MarketDataRepository
+from tradinggpt_options.storage.tables import StrategyDecisionSnapshot
 
 MARKET_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
@@ -388,6 +391,56 @@ def analyze_options(
                 ),
             )
             decision = analysis.decision
+            candidate = analysis.candidate
+            with factory() as session:
+                session.add(
+                    StrategyDecisionSnapshot(
+                        id=str(uuid4()),
+                        snapshot_at=now,
+                        underlying=underlying,
+                        expiry=expiry,
+                        decision=decision.direction,
+                        confidence_score=(
+                            Decimal(str(decision.confidence_score))
+                            if decision.confidence_score is not None else None
+                        ),
+                        estimated_win_probability=(
+                            Decimal(str(decision.estimated_win_probability))
+                            if decision.estimated_win_probability is not None else None
+                        ),
+                        model_version=decision.model_version,
+                        spot_price=spot_quote.last_price,
+                        risk_free_rate=Decimal(str(risk_free_rate)),
+                        candle_source=future_contract.tradingsymbol,
+                        candle_count=len(completed_candles),
+                        candidate_symbol=(
+                            candidate.contract.tradingsymbol if candidate else None
+                        ),
+                        candidate_strike=(
+                            candidate.contract.strike if candidate else None
+                        ),
+                        candidate_option_type=(
+                            candidate.contract.option_type if candidate else None
+                        ),
+                        candidate_mid=candidate.mid_price if candidate else None,
+                        candidate_iv=(
+                            Decimal(str(candidate.implied_volatility))
+                            if candidate and candidate.implied_volatility is not None
+                            else None
+                        ),
+                        candidate_delta=(
+                            Decimal(str(candidate.greeks.delta))
+                            if candidate and candidate.greeks is not None
+                            else None
+                        ),
+                        rationale_json=json.dumps(list(decision.rationale)),
+                        opposing_evidence_json=json.dumps(
+                            list(decision.opposing_evidence)
+                        ),
+                        warnings_json=json.dumps(list(analysis.warnings)),
+                    )
+                )
+                session.commit()
             print(
                 f"\n{underlying} | expiry={expiry.isoformat()} | "
                 f"spot={spot_quote.last_price} | "
