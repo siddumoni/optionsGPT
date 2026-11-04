@@ -102,9 +102,9 @@ There is no HTTP order-placement endpoint. The paper account is initialized by t
 
 - Kite credentials have not yet been supplied or used to test the adapter against a real account.
 - Live quote ingestion is available through the foreground `collect-options` CLI; Windows service/task scheduling, automatic token generation and robust process supervision remain future work.
-- Quote snapshots now preserve full bid/ask depth. Scheduled chain aggregation, OI history and derived chain analytics remain future work.
+- Quote snapshots preserve all available bid/ask depth levels; historical OHLCV candles have a separate validated adapter and idempotent storage. Scheduled chain aggregation, OI history and derived chain analytics remain future work.
 - Statutory options charges are not yet implemented as effective-dated rules. The paper broker's charge value is explicitly a configurable placeholder and currently defaults to zero.
-- Kite's historical candle service is not a long-term expired-options archive. Historical contract-level option data must be licensed/collected and validated before backtesting options.
+- Kite historical candles are supported for available instrument tokens, but its continuous-history feature is for futures, not expired options. Historical CE/PE contract data must be independently sourced or captured before expiry and validated before backtesting expired-option strategies.
 - Greeks use European Black–Scholes assumptions; expiry calendar/time conventions and dividend/carry inputs require market-specific validation.
 - No profitable strategy, 75% win rate, or live-trading readiness is claimed.
 - Live order placement is not implemented.
