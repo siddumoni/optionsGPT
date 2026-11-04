@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Iterable
 
-from tradinggpt_options.data.models import OptionContract
+from tradinggpt_options.data.models import FutureContract, OptionContract
 
 
 INDEX_UNDERLYING_PREFIXES = (
@@ -120,3 +120,77 @@ def parse_kite_instruments(
         )
     )
     return InstrumentParseResult(tuple(contracts), rejected, tuple(errors))
+
+
+@dataclass(frozen=True, slots=True)
+class FutureInstrumentParseResult:
+    contracts: tuple[FutureContract, ...]
+    rejected_rows: int
+    errors: tuple[str, ...]
+
+
+def parse_kite_futures_instruments(
+    csv_text: str,
+    *,
+    underlyings: Iterable[str] | None = None,
+) -> FutureInstrumentParseResult:
+    """Parse the NFO-FUT subset of Kite's daily NFO instrument master."""
+    allowed = {item.upper() for item in underlyings} if underlyings is not None else None
+    reader = csv.DictReader(io.StringIO(csv_text))
+    required = {
+        "instrument_token",
+        "tradingsymbol",
+        "name",
+        "expiry",
+        "tick_size",
+        "lot_size",
+        "instrument_type",
+        "segment",
+        "exchange",
+    }
+    if reader.fieldnames is None or not required.issubset(set(reader.fieldnames)):
+        missing = sorted(required - set(reader.fieldnames or []))
+        raise ValueError(f"instrument CSV missing required columns: {missing}")
+
+    contracts: list[FutureContract] = []
+    errors: list[str] = []
+    rejected = 0
+    seen: set[tuple[str, str]] = set()
+    for line_number, row in enumerate(reader, start=2):
+        if (
+            (row.get("segment") or "").strip() != "NFO-FUT"
+            or (row.get("instrument_type") or "").strip() != "FUT"
+        ):
+            continue
+        try:
+            exchange = (row.get("exchange") or "").strip().upper()
+            symbol = (row.get("tradingsymbol") or "").strip().upper()
+            underlying = _resolve_underlying(row.get("name") or "", symbol)
+            if allowed is not None and underlying not in allowed:
+                continue
+            identity = (exchange, symbol)
+            if not all(identity):
+                raise ValueError("empty exchange/tradingsymbol")
+            if identity in seen:
+                raise ValueError("duplicate exchange/tradingsymbol")
+            contract = FutureContract(
+                exchange=exchange,
+                tradingsymbol=symbol,
+                instrument_token=int(row["instrument_token"]),
+                underlying=underlying,
+                expiry=date.fromisoformat(row["expiry"]),
+                lot_size=int(row["lot_size"]),
+                tick_size=Decimal(row["tick_size"]),
+            )
+            seen.add(identity)
+            contracts.append(contract)
+        except (ValueError, TypeError, InvalidOperation, KeyError) as exc:
+            rejected += 1
+            errors.append(f"line {line_number}: {exc}")
+
+    contracts.sort(key=lambda item: (item.underlying, item.expiry, item.tradingsymbol))
+    return FutureInstrumentParseResult(
+        tuple(contracts),
+        rejected,
+        tuple(errors),
+    )
