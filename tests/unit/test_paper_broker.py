@@ -127,7 +127,7 @@ def test_paper_rejects_insufficient_cash_and_bad_lots() -> None:
 def test_equity_marks_open_option_at_bid_and_requires_fresh_quote() -> None:
     broker, contract, now = setup_broker()
     entry_quote = quote(contract, now, "99.90", "100.10")
-    fill = broker.buy_to_open(
+    broker.buy_to_open(
         contract=contract,
         quote=entry_quote,
         lots=1,
