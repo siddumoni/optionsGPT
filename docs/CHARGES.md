@@ -62,5 +62,5 @@ For one lot of 65 units bought at ₹100.10 and sold at ₹104.90:
 - Estimated total charges: ₹63.01.
 - Estimated net P&L: ₹248.99.
 
-The example excludes any exercise/physical-settlement taxes and assumes the
-paper fills at the displayed best ask on entry and best bid on exit.
+The example excludes exercise/physical-settlement taxes and assumes the paper
+broker can fill the full quantity from displayed depth using a VWAP.
