@@ -22,7 +22,7 @@ def initialize_paper_account() -> None:
             ),
         )
         print("Paper account initialized.")
-        print(f"Account: default")
+        print("Account: default")
         print(f"Cash balance: INR {broker.cash_balance():,.2f}")
         print("Trading mode: PAPER (no live order functionality)")
     engine.dispose()
