@@ -17,6 +17,7 @@ from tradinggpt_options.data.models import (
     assess_quote_quality,
 )
 from tradinggpt_options.execution.charges import NseOptionsChargeSchedule, OrderSide
+from tradinggpt_options.risk.limits import RiskLimits, size_long_option_position
 from tradinggpt_options.storage.tables import PaperAccount, PaperTrade
 
 
@@ -28,6 +29,7 @@ class PaperExecutionConfig:
     charge_schedule: NseOptionsChargeSchedule = field(
         default_factory=NseOptionsChargeSchedule
     )
+    risk_limits: RiskLimits | None = None
 
     def __post_init__(self) -> None:
         if not self.initial_capital.is_finite() or self.initial_capital <= 0:
@@ -145,6 +147,33 @@ class PaperBroker:
         }
         return breakdown.total, json.dumps(payload, separators=(",", ":"))
 
+    def _daily_risk_state(self, *, now: datetime) -> tuple[Decimal, int]:
+        local_date = now.astimezone(ZoneInfo("Asia/Kolkata")).date()
+        realized_today = Decimal("0")
+        for trade in self.trade_history():
+            if trade.status != "CLOSED" or trade.exit_at is None:
+                continue
+            exit_at = (
+                trade.exit_at.replace(tzinfo=UTC)
+                if trade.exit_at.tzinfo is None
+                else trade.exit_at.astimezone(UTC)
+            )
+            if exit_at.astimezone(ZoneInfo("Asia/Kolkata")).date() == local_date:
+                realized_today += trade.net_pnl
+
+        open_positions = self.open_trades()
+        worst_case_open_exposure = sum(
+            (
+                trade.entry_premium * trade.quantity + trade.charges
+                for trade in open_positions
+            ),
+            Decimal("0"),
+        )
+        # Count all open premium at risk against today's loss budget. This is
+        # conservative and avoids depending on a missing mark for an open leg.
+        daily_risk_pnl = realized_today - worst_case_open_exposure
+        return daily_risk_pnl, len(open_positions)
+
     def _validate_quote(self, quote: OptionQuote, *, now: datetime) -> None:
         quality = assess_quote_quality(
             quote,
@@ -179,6 +208,26 @@ class PaperBroker:
             raise ValueError("lots must be at least one")
         quantity = lots * contract.lot_size
         ask = self._depth_fill_price(quote.ask, quantity)
+        account = self._account()
+        limits = self.config.risk_limits
+        if limits is None:
+            raise ValueError("risk limits must be configured before opening paper positions")
+        daily_risk_pnl, open_position_count = self._daily_risk_state(now=observed_now)
+        sizing = size_long_option_position(
+            available_cash=account.cash_balance,
+            premium_per_unit=ask,
+            lot_size=contract.lot_size,
+            limits=limits,
+            current_daily_net_pnl=daily_risk_pnl,
+            current_open_positions=open_position_count,
+        )
+        if not sizing.approved:
+            raise ValueError(f"paper risk rejected: {sizing.reason}")
+        if lots > sizing.lots:
+            raise ValueError(
+                f"requested {lots} lots exceeds configured risk limits; "
+                f"maximum approved lots: {sizing.lots}"
+            )
         notional = (ask * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         entry_charge, entry_charges_json = self._calculate_charges(
             premium=ask,
@@ -187,7 +236,6 @@ class PaperBroker:
             at=observed_now,
         )
         total_debit = notional + entry_charge
-        account = self._account()
         if account.cash_balance < total_debit:
             raise ValueError("insufficient paper cash for premium debit and charges")
 
