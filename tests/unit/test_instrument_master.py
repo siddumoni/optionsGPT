@@ -1,6 +1,4 @@
-from tradinggpt_options.data.instrument_master import (
-    parse_kite_instruments,
-)
+from tradinggpt_options.data.instrument_master import parse_kite_instruments
 
 
 HEADER = (
