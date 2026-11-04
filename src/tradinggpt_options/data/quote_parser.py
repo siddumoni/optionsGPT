@@ -17,7 +17,7 @@ def _decimal(value: Any) -> Decimal | None:
     return result if result.is_finite() else None
 
 
-def _depth_levels(levels: Any) -> tuple[DepthLevel, ...]:
+def _depth_levels(levels: Any, *, descending: bool) -> tuple[DepthLevel, ...]:
     if not isinstance(levels, list):
         return ()
     result: list[DepthLevel] = []
@@ -30,9 +30,10 @@ def _depth_levels(levels: Any) -> tuple[DepthLevel, ...]:
             orders = int(item.get("orders", 0))
         except (TypeError, ValueError):
             continue
-        if price is None or price <= 0 or quantity < 0 or orders < 0:
+        if price is None or price <= 0 or quantity <= 0 or orders < 0:
             continue
         result.append(DepthLevel(price=price, quantity=quantity, orders=orders))
+    result.sort(key=lambda level: level.price, reverse=descending)
     return tuple(result)
 
 
@@ -69,8 +70,8 @@ def parse_kite_quote(
         exchange_timestamp=timestamp,
         received_at=observed_at,
         last_price=_decimal(payload.get("last_price")),
-        bid=_depth_levels(depth.get("buy")),
-        ask=_depth_levels(depth.get("sell")),
+        bid=_depth_levels(depth.get("buy"), descending=True),
+        ask=_depth_levels(depth.get("sell"), descending=False),
         volume=_optional_nonnegative_int(payload.get("volume")),
         open_interest=_optional_nonnegative_int(payload.get("oi")),
     )
