@@ -61,12 +61,12 @@ A one-week schedule is a time-box for a **paper-trading MVP**, not a guarantee o
 
 ## Implementation checkpoint — 4 November 2026
 
-Estimated engineering completion: **approximately 65% of the paper MVP**. This is a scope estimate, not a trading-performance metric.
+Estimated engineering completion: **approximately 70% of the paper MVP**. This is a scope estimate, not a trading-performance metric.
 
 | Day | Status | Evidence / remaining work |
 |---|---|---|
 | Day 1 — Contract/data foundation | Implemented | Daily NFO parser, dated contracts, expiry/ATM selection, SQLite persistence |
-| Day 2 — Live data collection | Mostly implemented | Read-only Kite REST/WebSocket collector, reconnect resubscription, futures-backed candle history, stale/depth checks and foreground CLI; real credentials, scheduled operation and service supervision remain |
+| Day 2 — Live data collection | Mostly implemented | Read-only Kite REST/WebSocket collector, five-minute rolling near-ATM subscriptions, reconnect recovery, futures-backed candle history, stale/depth checks, auth CLI and foreground service; real credentials, scheduled operation and process supervision remain |
 | Day 3 — Options analytics | Partially implemented | BSM Greeks, IV solver, quality-aware CE/PE chain view; persisted chain snapshots, OI changes and market-specific model validation remain |
 | Day 4 — Research and risk | Partially implemented | One-pass analysis CLI, explainable EMA/VWAP/RSI/volume baseline, CE/PE liquidity/delta ranking and enforced paper premium/daily-loss/concurrent-position limits; multi-timeframe regime and event/news evidence remain |
 | Day 5 — Paper execution | Foundation implemented | Persistent ledger, depth VWAP, insufficient-depth rejection, effective-dated charges and mandatory explicit risk configuration; partial fills, automated exits and restart recovery remain |
