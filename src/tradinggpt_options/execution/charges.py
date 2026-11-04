@@ -13,11 +13,16 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(PAISE, rounding=ROUND_HALF_UP)
 
 
+def _whole_rupee(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
 @dataclass(frozen=True, slots=True)
 class ChargeBreakdown:
     brokerage: Decimal
     exchange_transaction: Decimal
     sebi_turnover: Decimal
+    ipft: Decimal
     stt: Decimal
     stamp_duty: Decimal
     gst: Decimal
@@ -29,6 +34,7 @@ class ChargeBreakdown:
                 self.brokerage,
                 self.exchange_transaction,
                 self.sebi_turnover,
+                self.ipft,
                 self.stt,
                 self.stamp_duty,
                 self.gst,
@@ -55,6 +61,7 @@ class NseOptionsChargeSchedule:
     brokerage_per_order: Decimal = Decimal("20")
     exchange_transaction_rate: Decimal = Decimal("0.0003553")
     sebi_turnover_rate: Decimal = Decimal("0.000001")
+    ipft_turnover_rate: Decimal = Decimal("0.000000001")
     stt_sell_rate: Decimal = Decimal("0.0015")
     stamp_duty_buy_rate: Decimal = Decimal("0.00003")
     gst_rate: Decimal = Decimal("0.18")
@@ -65,6 +72,7 @@ class NseOptionsChargeSchedule:
             self.brokerage_per_order,
             self.exchange_transaction_rate,
             self.sebi_turnover_rate,
+            self.ipft_turnover_rate,
             self.stt_sell_rate,
             self.stamp_duty_buy_rate,
             self.gst_rate,
@@ -98,18 +106,20 @@ class NseOptionsChargeSchedule:
         brokerage = _money(self.brokerage_per_order)
         exchange = _money(premium_turnover * self.exchange_transaction_rate)
         sebi = _money(premium_turnover * self.sebi_turnover_rate)
-        stt = _money(
+        ipft = _money(premium_turnover * self.ipft_turnover_rate)
+        stt = _whole_rupee(
             premium_turnover * self.stt_sell_rate if side == "SELL" else Decimal("0")
         )
         stamp = _money(
             premium_turnover * self.stamp_duty_buy_rate
             if side == "BUY" else Decimal("0")
         )
-        gst = _money((brokerage + exchange + sebi) * self.gst_rate)
+        gst = _money((brokerage + exchange + sebi + ipft) * self.gst_rate)
         return ChargeBreakdown(
             brokerage=brokerage,
             exchange_transaction=exchange,
             sebi_turnover=sebi,
+            ipft=ipft,
             stt=stt,
             stamp_duty=stamp,
             gst=gst,
