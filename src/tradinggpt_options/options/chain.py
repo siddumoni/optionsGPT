@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from tradinggpt_options.data.models import OptionContract, OptionQuote
+from tradinggpt_options.data.models import FutureContract, OptionContract, OptionQuote
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,4 +126,24 @@ def select_near_atm_contracts(
                 item.option_type,
             ),
         )
+    )
+
+
+def select_nearest_future_contract(
+    contracts: Iterable[FutureContract],
+    *,
+    underlying: str,
+    as_of: date,
+) -> FutureContract | None:
+    eligible = [
+        item
+        for item in contracts
+        if item.underlying.upper() == underlying.upper() and item.expiry >= as_of
+    ]
+    if not eligible:
+        return None
+    nearest_expiry = min(item.expiry for item in eligible)
+    return min(
+        (item for item in eligible if item.expiry == nearest_expiry),
+        key=lambda item: item.tradingsymbol,
     )
