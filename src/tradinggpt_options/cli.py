@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -24,6 +24,15 @@ from tradinggpt_options.research.baseline import analyze_baseline
 from tradinggpt_options.storage.repository import MarketDataRepository
 
 MARKET_TIMEZONE = ZoneInfo("Asia/Kolkata")
+
+
+def _option_selection_date(market_now: datetime):
+    if market_now.tzinfo is None or market_now.utcoffset() is None:
+        raise ValueError("market_now must be timezone-aware")
+    local_now = market_now.astimezone(MARKET_TIMEZONE)
+    if local_now.time() >= time(hour=15, minute=30):
+        return local_now.date() + timedelta(days=1)
+    return local_now.date()
 
 
 def initialize_paper_account() -> None:
@@ -210,6 +219,7 @@ def analyze_options(
         )
         market_now = datetime.now(MARKET_TIMEZONE)
         market_date = market_now.date()
+        selection_date = _option_selection_date(market_now)
         contracts = collector.load_daily_instrument_master(
             underlyings=set(underlyings),
             snapshot_date=market_date,
@@ -243,7 +253,7 @@ def analyze_options(
         selected = select_near_atm_contracts(
             contracts,
             spot_prices=spot_prices,
-            as_of=market_date,
+            as_of=selection_date,
             strikes_each_side=strikes_each_side,
         )
         if not selected:
@@ -288,7 +298,7 @@ def analyze_options(
             ]
             expiry = select_nearest_expiry(
                 underlying_contracts,
-                as_of=market_date,
+                as_of=selection_date,
             )
             if expiry is None:
                 print(f"{underlying}: NO_TRADE — no non-expired option expiry")
@@ -378,7 +388,9 @@ def collect_options(
             session_factory=session_factory,
         )
 
-        market_date = datetime.now(MARKET_TIMEZONE).date()
+        market_now = datetime.now(MARKET_TIMEZONE)
+        market_date = market_now.date()
+        selection_date = _option_selection_date(market_now)
         contracts = collector.load_daily_instrument_master(
             underlyings=set(underlyings),
             snapshot_date=market_date,
@@ -413,7 +425,7 @@ def collect_options(
         selected = select_near_atm_contracts(
             contracts,
             spot_prices=spot_prices,
-            as_of=market_date,
+            as_of=selection_date,
             strikes_each_side=strikes_each_side,
         )
         if not selected:
@@ -431,6 +443,7 @@ def collect_options(
         print("Mode: PAPER / READ-ONLY MARKET DATA")
         print("No broker order-placement methods are available.")
         print(f"Market date: {market_date.isoformat()}")
+        print(f"Expiry selection date: {selection_date.isoformat()}")
         print(f"Underlyings: {', '.join(underlyings)}")
         print(f"Valid contracts in master: {len(contracts)}")
         print(f"Selected near-ATM contracts: {len(selected)}")
